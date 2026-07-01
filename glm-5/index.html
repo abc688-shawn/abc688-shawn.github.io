@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GLM-5 论文解读</title>
+    <meta
+      name="description"
+      content="GLM-5: from Vibe Coding to Agentic Engineering 的中文阅读笔记网页版。"
+    >
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23172023'/%3E%3Cpath d='M14 44 38 12h12L26 52H14z' fill='%2356b99f'/%3E%3Cpath d='M14 12h25L26 28H14z' fill='%23f3f7f4'/%3E%3C/svg%3E"
+    >
+    <link rel="stylesheet" href="./styles.css">
+    <script>
+      window.MathJax = {
+        tex: {
+          inlineMath: [["$", "$"], ["\\(", "\\)"]],
+          displayMath: [["$$", "$$"], ["\\[", "\\]"]]
+        },
+        svg: { fontCache: "global" },
+        options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"] }
+      };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+    <script defer src="./app.js"></script>
+  </head>
+  <body>
+    <div class="read-progress" aria-hidden="true"></div>
+    <div class="attention-rail" aria-hidden="true">
+      <span></span>
+      <span></span>
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+
+    <header class="hero" id="top">
+      <div class="hero-copy">
+        <p class="kicker">arXiv:2602.15763v2 / GLM-5 论文解读</p>
+        <h1 id="paper-title">GLM-5: from Vibe Coding to Agentic Engineering</h1>
+        <p class="hero-summary" id="hero-summary">
+          正在整理阅读笔记。
+        </p>
+        <div class="artifact-links" aria-label="文档资源">
+          <a href="./README.md">Markdown</a>
+          <a href="./paper.pdf">PDF</a>
+          <a href="https://github.com/zai-org/GLM-5">GitHub</a>
+        </div>
+      </div>
+
+      <figure class="hero-figure">
+        <img src="./images/fig2_arch_training_pipeline.png" alt="GLM-5 training pipeline">
+      </figure>
+
+      <dl class="meta-strip" id="meta-strip"></dl>
+    </header>
+
+    <main class="page-shell">
+      <aside class="toc-panel" aria-label="文章目录">
+        <a class="toc-home" href="#top">GLM-5</a>
+        <nav id="toc"></nav>
+      </aside>
+
+      <article class="article" id="article" aria-live="polite">
+        <p>正在载入 Markdown。</p>
+      </article>
+    </main>
+
+    <footer class="site-footer">
+      <p>网页内容由同目录下的 <a href="./README.md">README.md</a> 渲染生成。</p>
+    </footer>
+  </body>
+</html>
