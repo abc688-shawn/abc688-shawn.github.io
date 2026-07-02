@@ -1,0 +1,957 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>MiniLLM 把蒸馏从“模仿答案”改成“学生采样、教师纠偏”</title>
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [["\\(", "\\)"]],
+        displayMath: [["\\[", "\\]"]],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"]
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      --paper: #f7f3ee;
+      --panel: #fffdf9;
+      --panel-strong: #f0e8dd;
+      --ink: #282522;
+      --muted: #716960;
+      --soft: #8d8378;
+      --line: #ded6ca;
+      --accent: #b84a3f;
+      --accent-dark: #8f332b;
+      --accent-2: #496f68;
+      --code: #eee8df;
+      --mark: #efe1dc;
+      --shadow: 0 18px 50px rgba(54, 45, 35, 0.08);
+      margin: 0;
+      background:
+        linear-gradient(90deg, rgba(40, 37, 34, 0.035) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(40, 37, 34, 0.025) 1px, transparent 1px),
+        var(--paper);
+      background-size: 44px 44px;
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      font-size: 18px;
+      line-height: 1.82;
+    }
+
+    body.theme-lab {
+      --paper: #eef2f1;
+      --panel: #fbfdfc;
+      --panel-strong: #dde8e6;
+      --ink: #18201f;
+      --muted: #53605e;
+      --soft: #6d7a78;
+      --line: #c8d5d1;
+      --accent: #19706a;
+      --accent-dark: #0f4f4a;
+      --accent-2: #a15d2b;
+      --code: #e3ece9;
+      --mark: #d7ece9;
+    }
+
+    body.theme-magazine {
+      --paper: #f5f0e7;
+      --panel: #fffaf1;
+      --panel-strong: #eadfcf;
+      --ink: #211f1b;
+      --muted: #6f6254;
+      --soft: #88796a;
+      --line: #d9ccba;
+      --accent: #9f3e35;
+      --accent-dark: #722923;
+      --accent-2: #294f73;
+      --code: #ede1d2;
+      --mark: #ead6c6;
+    }
+
+    body.theme-notebook {
+      --paper: #fbf7ec;
+      --panel: #fffdf7;
+      --panel-strong: #f1ead9;
+      --ink: #26231d;
+      --muted: #665f53;
+      --soft: #807768;
+      --line: #ddd2bc;
+      --accent: #a34d2f;
+      --accent-dark: #76341f;
+      --accent-2: #5f6f3b;
+      --code: #f0e7d4;
+      --mark: #f1dfb6;
+    }
+
+    .page {
+      width: min(1120px, calc(100% - 48px));
+      margin: 0 auto;
+      padding: 62px 0 118px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+      gap: 44px;
+      align-items: end;
+      padding: 26px 0 42px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .eyebrow,
+    .chapter-kicker,
+    .module-label,
+    .route-label {
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 850;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    .quote {
+      font-family: "Noto Serif SC", "Songti SC", "STSong", SimSun, Georgia, serif;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      max-width: 800px;
+      margin: 22px 0 20px;
+      font-size: 58px;
+      line-height: 1.12;
+      font-weight: 900;
+    }
+
+    .subtitle {
+      max-width: 780px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 22px;
+      line-height: 1.68;
+      font-weight: 650;
+    }
+
+    .byline {
+      margin: 26px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 750;
+    }
+
+    .route-panel {
+      background: color-mix(in srgb, var(--panel) 92%, var(--accent) 8%);
+      border: 1px solid var(--line);
+      border-top: 5px solid var(--accent);
+      padding: 22px 22px 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .route-title {
+      margin: 10px 0 8px;
+      font-size: 18px;
+      line-height: 1.45;
+      font-weight: 850;
+    }
+
+    .route-text {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .hero-meta {
+      display: grid;
+      gap: 10px;
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px dashed var(--line);
+    }
+
+    .hero-meta-row {
+      display: grid;
+      grid-template-columns: 74px 1fr;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .hero-meta-row b {
+      color: var(--ink);
+      font-weight: 850;
+    }
+
+    mark {
+      background: var(--mark);
+      color: inherit;
+      padding: 0 0.16em;
+    }
+
+    a {
+      color: var(--accent-dark);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 0.18em;
+    }
+
+    .toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 20px;
+      margin: 28px 0 58px;
+      padding: 17px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 15px;
+    }
+
+    .toc a {
+      color: var(--muted);
+      text-decoration: none;
+      font-weight: 760;
+    }
+
+    .toc a:hover {
+      color: var(--accent-dark);
+    }
+
+    .toc .toc-num {
+      color: var(--accent);
+      margin-right: 6px;
+      font-weight: 900;
+    }
+
+    .intro {
+      max-width: 840px;
+      margin-bottom: 34px;
+    }
+
+    p {
+      margin: 0 0 22px;
+    }
+
+    strong {
+      font-weight: 850;
+    }
+
+    .paper-roster {
+      max-width: 920px;
+      margin: 42px 0 84px;
+    }
+
+    .roster-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      color: var(--accent-dark);
+      font-size: 15px;
+      font-weight: 850;
+    }
+
+    .roster-title::before {
+      content: "";
+      width: 22px;
+      height: 2px;
+      background: var(--accent);
+    }
+
+    .paper-item {
+      display: grid;
+      grid-template-columns: 44px 1fr;
+      gap: 16px;
+      padding: 22px 0;
+      border-bottom: 1px dashed var(--line);
+    }
+
+    .paper-index {
+      width: 30px;
+      height: 30px;
+      display: inline-grid;
+      place-items: center;
+      border: 2px solid var(--accent);
+      border-radius: 50%;
+      color: var(--accent);
+      font-size: 17px;
+      font-weight: 850;
+      line-height: 1;
+    }
+
+    .paper-item-single {
+      display: block;
+    }
+
+    .paper-title {
+      margin: 0 0 4px;
+      font-size: 18px;
+      line-height: 1.55;
+      font-weight: 850;
+    }
+
+    .paper-meta,
+    .caption,
+    .note,
+    .insight-text,
+    .timeline-text,
+    .qa-answer {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .section {
+      max-width: 900px;
+      margin: 0 0 94px;
+      scroll-margin-top: 24px;
+    }
+
+    .chapter-kicker {
+      margin-bottom: 12px;
+      text-transform: none;
+      letter-spacing: 0.08em;
+    }
+
+    h2 {
+      max-width: 800px;
+      margin: 0 0 24px;
+      font-size: 36px;
+      line-height: 1.28;
+      font-weight: 850;
+    }
+
+    h3 {
+      margin: 38px 0 14px;
+      font-size: 21px;
+      line-height: 1.45;
+      font-weight: 850;
+    }
+
+    h3::before {
+      content: "§";
+      color: var(--accent);
+      margin-right: 9px;
+      font-family: Georgia, serif;
+    }
+
+    .lead {
+      color: var(--muted);
+      font-size: 20px;
+      font-weight: 650;
+    }
+
+    .figure {
+      margin: 36px 0 42px;
+      padding: 18px 18px 14px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: 0 10px 32px rgba(47, 40, 31, 0.06);
+    }
+
+    .figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      margin: 0 auto;
+      background: #fff;
+    }
+
+    .caption {
+      margin: 12px 0 0;
+    }
+
+    .caption-label {
+      color: var(--accent);
+      font-weight: 900;
+    }
+
+    .callout,
+    .equation,
+    .stats,
+    .insight-grid,
+    .timeline,
+    .qa,
+    .note {
+      margin: 34px 0 42px;
+    }
+
+    .callout {
+      padding: 22px 24px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-left: 5px solid var(--accent);
+    }
+
+    .callout-label {
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 900;
+      margin-right: 8px;
+    }
+
+    .quote {
+      margin: 36px 0 42px;
+      padding: 8px 0 8px 24px;
+      border-left: 5px solid var(--accent);
+      color: var(--ink);
+      font-size: 26px;
+      line-height: 1.52;
+      font-weight: 800;
+    }
+
+    .quote cite {
+      display: block;
+      margin-top: 12px;
+      color: var(--muted);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+      font-style: normal;
+      font-weight: 700;
+    }
+
+    .note {
+      padding: 15px 18px;
+      background: color-mix(in srgb, var(--panel-strong) 70%, #fff 30%);
+      border: 1px dashed var(--line);
+    }
+
+    .equation {
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+
+    .equation-title {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      color: var(--accent-dark);
+      font-size: 14px;
+      font-weight: 850;
+    }
+
+    .equation-scroll {
+      margin: 0;
+      padding: 20px 22px;
+      overflow-x: auto;
+      background: var(--code);
+      color: #34302c;
+    }
+
+    .equation-body {
+      min-width: max-content;
+      color: #34302c;
+      font-size: 17px;
+      line-height: 1.7;
+    }
+
+    mjx-container[jax="CHTML"][display="true"] {
+      margin: 0 !important;
+      text-align: left !important;
+    }
+
+    pre {
+      margin: 0;
+      padding: 20px 22px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: var(--code);
+      color: #34302c;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 14px;
+      line-height: 1.72;
+    }
+
+    pre {
+      margin: 28px 0;
+      border-left: 4px solid var(--accent);
+    }
+
+    .equation-explain {
+      padding: 16px 18px 18px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.72;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.92em;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      border: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .stat {
+      padding: 20px 18px;
+      border-right: 1px solid var(--line);
+    }
+
+    .stat:last-child {
+      border-right: 0;
+    }
+
+    .stat-value {
+      color: var(--accent-dark);
+      font-family: "Noto Serif SC", "Songti SC", "STSong", SimSun, Georgia, serif;
+      font-size: 27px;
+      line-height: 1.2;
+      font-weight: 900;
+    }
+
+    .stat-label {
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+      font-weight: 700;
+    }
+
+    .insight-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .insight-card {
+      min-height: 168px;
+      padding: 20px 20px 18px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+
+    .insight-title {
+      margin: 8px 0 10px;
+      font-weight: 850;
+      line-height: 1.45;
+    }
+
+    .timeline {
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .timeline-item {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 20px;
+      padding: 20px 0;
+      border-bottom: 1px dashed var(--line);
+    }
+
+    .timeline-item:last-child {
+      border-bottom: 0;
+    }
+
+    .timeline-date {
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .timeline-title,
+    .qa-question {
+      margin-bottom: 5px;
+      font-weight: 850;
+      line-height: 1.45;
+    }
+
+    .qa {
+      display: grid;
+      gap: 12px;
+    }
+
+    .qa-row {
+      padding: 18px 20px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      margin: 34px 0 42px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 680px;
+    }
+
+    th,
+    td {
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--panel-strong);
+      font-weight: 850;
+    }
+
+    .divider {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin: 66px 0;
+      color: var(--accent);
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .divider span {
+      width: 8px;
+      height: 8px;
+      border: 1px solid var(--accent);
+      transform: rotate(45deg);
+    }
+
+    ul {
+      padding-left: 1.2em;
+      margin: 0 0 24px;
+    }
+
+    li + li {
+      margin-top: 8px;
+    }
+
+    @media (max-width: 860px) {
+      .hero {
+        grid-template-columns: 1fr;
+        gap: 28px;
+      }
+
+      .route-panel {
+        box-shadow: none;
+      }
+    }
+
+    @media (max-width: 720px) {
+      body {
+        font-size: 16px;
+        background-size: 34px 34px;
+      }
+
+      .page {
+        width: min(100% - 28px, 960px);
+        padding-top: 34px;
+      }
+
+      h1 {
+        font-size: 36px;
+      }
+
+      h2 {
+        font-size: 28px;
+      }
+
+      .subtitle,
+      .lead {
+        font-size: 18px;
+      }
+
+      .paper-item {
+        grid-template-columns: 34px 1fr;
+        gap: 12px;
+      }
+
+      .figure,
+      .callout,
+      .route-panel,
+      .insight-card,
+      .qa-row {
+        padding: 14px;
+      }
+
+      .stats,
+      .insight-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .stat {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .stat:last-child {
+        border-bottom: 0;
+      }
+
+      .timeline-item {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+
+      .quote {
+        font-size: 22px;
+      }
+    }
+  </style>
+</head>
+<body class="theme-lab mode-single-paper">
+  <article class="page">
+    <header class="hero">
+      <div>
+        <div class="eyebrow">PAPER DEEP DIVE · arXiv:2306.08543v6 · ICLR 2024</div>
+        <h1>MiniLLM 把蒸馏从“模仿答案”改成“学生采样、教师纠偏”</h1>
+        <p class="subtitle">这篇论文值得读，不是因为它又压缩了一次大模型，而是因为它把 LLM 蒸馏里的核心错配说清楚了：生成任务的教师分布多峰、学生容量有限，继续用 forward KL 逼学生覆盖所有模式，反而会鼓励低质量区域。</p>
+        <p class="byline">中文深读 · 基于 arXiv v6 / ICLR 2024 论文与源文件整理</p>
+      </div>
+      <aside class="route-panel" aria-label="阅读路线">
+  <div class="route-label">READING ROUTE</div>
+  <div class="route-title">单论文深读：机制解剖</div>
+  <p class="route-text">按问题张力、目标函数、on-policy 训练、证据与边界组织；所有关键数字都回到论文的章节、图、表或附录。</p>
+<div class="hero-meta">
+<div class="hero-meta-row"><b>中心问题</b><span>白盒 LLM 蒸馏为什么不能只做 teacher forcing 或 teacher sample imitation</span></div><div class="hero-meta-row"><b>技术主张</b><span>用 reverse KL 做 mode-seeking，并用 on-policy 优化避免训练/推理错配</span></div><div class="hero-meta-row"><b>证据边界</b><span>主要在 instruction-following 数据和 GPT-2/OPT/LLaMA 家族上验证</span></div>
+</div>
+</aside>
+    </header>
+
+    <nav class="toc" aria-label="目录">
+      <a href="#scope"><span class="toc-num">01</span>读这篇论文，先抓住一个错配：分类式蒸馏不等于生成式蒸馏</a>
+<a href="#method"><span class="toc-num">02</span>MiniLLM 的方法核心：反向 KL 让学生追主要模式，而不是背完教师样本</a>
+<a href="#optimization"><span class="toc-num">03</span>为什么必须 on-policy：目标函数好看，直接优化却会高方差、奖励黑客、短答案</a>
+<a href="#evidence"><span class="toc-num">04</span>主结果怎么读：MiniLLM 几乎总赢，但赢法不是同一种</a>
+<a href="#diagnostics"><span class="toc-num">05</span>诊断实验让论点更可信：暴露偏差、校准、长回复和多样性</a>
+<a href="#ledger"><span class="toc-num">06</span>证据账本：哪些结论强，哪些只是合理推断</a>
+<a href="#limits"><span class="toc-num">07</span>限制与开放问题：MiniLLM 说服了什么，还没说服什么</a>
+    </nav>
+
+    <section class="intro">
+      <p class="lead">如果把知识蒸馏理解成“让小模型背大模型答案”，MiniLLM 的价值会被低估。它真正处理的是一个更细的分布问题：教师 LLM 在开放式生成里有许多可行回复模式，而小学生模型没有足够容量覆盖全部模式。论文的判断是，<mark>覆盖所有模式不如追到主要模式</mark>。</p>
+<p>标准 KD、word-level KD 和 SeqKD 本质上更接近 forward KL：它奖励学生覆盖教师分布中尽可能多的区域。这个策略在分类任务里常常合理，因为输出空间小；但在指令回复、开放问答、长文本生成里，输出空间巨大，多峰结构复杂，学生若被迫“都沾一点”，就可能在教师低概率区域放出过多概率质量。</p>
+<p>MiniLLM 的换手很明确：把目标换成 reverse KL，让学生在自己的容量内生成教师更认可的回复；再把训练改成 on-policy，让学生在训练时就面对自己生成的前缀。我的读法是：这篇论文把蒸馏问题从“数据复制”推向了“策略优化”。</p>
+<blockquote class="quote">这篇论文的关键不是小模型变强，而是它解释了为什么 LLM 蒸馏中的“强行覆盖”会伤害生成质量。<cite>阅读论点</cite></blockquote>
+    </section>
+
+    <section class="paper-roster" aria-label="论文或报告档案">
+  <div class="roster-title">论文档案与版本说明</div>
+  <div class="paper-item paper-item-single">
+  <div>
+    <p class="paper-title">MiniLLM: On-Policy Distillation of Large Language Models</p>
+    <p class="paper-meta">Yuxian Gu, Li Dong, Furu Wei, Minlie Huang · arXiv:2306.08543v6 · last revised 2026-01-31 · ICLR 2024 conference paper · 源码/数据/模型：github.com/microsoft/LMOps/tree/main/minillm</p>
+  </div>
+</div>
+</section>
+
+    <section class="section" id="scope">
+  <div class="chapter-kicker">第一章</div>
+  <h2>读这篇论文，先抓住一个错配：分类式蒸馏不等于生成式蒸馏</h2>
+  <div class="stats"><div class="stat">
+  <div class="stat-value">120M-13B</div>
+  <div class="stat-label">论文实验覆盖的学生/教师规模区间，见摘要与 Table 1</div>
+</div><div class="stat">
+  <div class="stat-value">5</div>
+  <div class="stat-label">指令跟随评测集：DollyEval、SelfInst、VicunaEval、S-NI、UnNI</div>
+</div><div class="stat">
+  <div class="stat-value">3</div>
+  <div class="stat-label">核心稳定化策略：single-step、teacher-mixed、length normalization</div>
+</div></div>
+<p>论文在 Introduction 里把蒸馏分为 black-box KD 与 white-box KD。前者只能拿到教师生成文本，类似 Alpaca/Vicuna 这一路的 API 生成数据微调；后者还能访问教师输出分布或隐藏状态。MiniLLM 针对的是第二种：教师模型白盒可用，学生可以看到每一步 token 分布。</p>
+<p>作者认为旧式白盒 KD 在 LLM 上欠探索，原因很实际：BERT 类小模型分类/理解任务的输出空间有限，而 LLM 的生成任务输出空间大、回复多样、长度不定。forward KL 要求学生覆盖教师的多种可能回复；当学生容量不足时，它会把概率放进教师的低概率空洞区域。</p>
+<div class="callout"><span class="callout-label">论文支持</span>Introduction 与 Method 第 2 节明确把标准 KD 近似为 forward KL，并把问题定位为 generative LLM 中 teacher distribution 的多峰结构和 student capacity 的错配。</div>
+<figure class="figure">
+  <img src="images/toy2.png" alt="Forward KL and reverse KL toy distribution">
+  <figcaption class="caption"><span class="caption-label">图 1 · Paper Fig. 2</span> toy 实验把一个高斯混合分布压到单高斯。要看的不是曲线美观，而是行为差异：forward KL 倾向覆盖多个模式之间的空洞，reverse KL 倾向贴住主要模式。论文把这个直觉迁移到开放式文本生成。</figcaption>
+</figure>
+</section>
+
+<section class="section" id="method">
+  <div class="chapter-kicker">第二章</div>
+  <h2>MiniLLM 的方法核心：反向 KL 让学生追主要模式，而不是背完教师样本</h2>
+  <p>把 prompt 记为 \(x\)，回复序列记为 \(y\)。教师分布是 \(p(y\mid x)\)，学生分布是 \(q_\theta(y\mid x)\)。标准 KD 最小化的方向接近 \(\mathrm{KL}(p\|q_\theta)\)，也就是 teacher-to-student；MiniLLM 反过来最小化 \(\mathrm{KL}(q_\theta\|p)\)，也就是 student-to-teacher。方向一换，行为就变了。</p>
+<div class="equation">
+  <div class="equation-title">MiniLLM 的 reverse KL 目标，对应论文 Eq. (1)</div>
+  <div class="equation-scroll">
+    <div class="equation-body">\[
+\begin{aligned}
+\theta &amp;= \arg\min_{\theta} \mathcal{L}(\theta)
+= \arg\min_{\theta} \mathrm{KL}\left(q_{\theta} \| p\right) \\
+&amp;= \arg\min_{\theta}\left[-\mathbb{E}_{\substack{x\sim p_x\\ y\sim q_{\theta}(\cdot\mid x)}} \log \frac{p(y\mid x)}{q_{\theta}(y\mid x)}\right].
+\end{aligned}
+\]</div>
+  </div>
+  <div class="equation-explain">直觉先于公式：采样来自学生 qθ，而不是教师 p。学生生成一条回复后，教师分布 p 给它打相对分数；若回复在教师下概率高、在学生下还没有被过度自信，目标会鼓励它。新意在 KL 方向和采样分布。</div>
+</div>
+<figure class="figure">
+  <img src="images/method1.png" alt="Sequence-level KD versus MiniLLM method diagram">
+  <figcaption class="caption"><span class="caption-label">图 2 · Paper Fig. 3</span> 左边 SeqKD 是教师生成文本，学生记忆这些文本；右边 MiniLLM 是学生自己生成，教师对学生生成的 token/序列给分。这个图说明论文把蒸馏从 supervised imitation 推向 policy optimization。</figcaption>
+</figure>
+<div class="insight-grid"><div class="insight-card">
+  <div class="module-label">PAPER-BACKED</div>
+  <div class="insight-title">reverse KL 被作者解释为 mode-seeking</div>
+  <div class="insight-text">Method 第 2.1 节声称它会让 qθ 给 p 的大模式更高概率、忽略小模式；这被 toy 图和相关文献支撑，但不是对所有任务的普遍保证。</div>
+</div><div class="insight-card">
+  <div class="module-label">SYNTHESIS</div>
+  <div class="insight-title">它牺牲的可能是多样性上限，换来主要模式的可靠性</div>
+  <div class="insight-text">论文自己承认 reverse KL 可能丢模式，因此在 Generation Diversity 段落用 Dist-4 与 test loss 补充检查。这个风险不能从方法名里消失。</div>
+</div></div>
+</section>
+
+<section class="section" id="optimization">
+  <div class="chapter-kicker">第三章</div>
+  <h2>为什么必须 on-policy：目标函数好看，直接优化却会高方差、奖励黑客、短答案</h2>
+  <p>reverse KL 的期望在 \(y\sim q_\theta\) 下计算，这迫使训练过程看见学生自己会生成什么。论文用 Policy Gradient 推导梯度：每一步 token 的梯度被后续累积的 \(\log p/q_\theta\) 奖励加权。这让训练更贴近推理，但也带来三个工程问题。</p>
+<div class="equation">
+  <div class="equation-title">策略梯度形式，对应论文 Eq. (2)</div>
+  <div class="equation-scroll">
+    <div class="equation-body">\[
+\begin{aligned}
+\nabla \mathcal{L}(\theta)
+&amp;= -\mathbb{E}_{\substack{x\sim p_x\\ y\sim q_{\theta}(\cdot\mid x)}}
+\sum_{t=1}^{T}(R_t-1)\nabla\log q_{\theta}(y_t\mid y_{&lt;t},x), \\
+R_t &amp;= \sum_{t'=t}^{T} \log \frac{p(y_{t'}\mid y_{&lt;t'},x)}{q_{\theta}(y_{t'}\mid y_{&lt;t'},x)}.
+\end{aligned}
+\]</div>
+  </div>
+  <div class="equation-explain">R_t 看的是从当前位置到结尾的累计相对质量。它让早期 token 对后续质量负责，因此能处理自由生成前缀；但累计量天然高方差，也会偏好短句。</div>
+</div>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>训练难点</th><th>论文策略</th><th>机制解释</th><th>证据位置</th></tr></thead>
+    <tbody>
+      <tr><td>高方差</td><td>Single-Step Decomposition</td><td>把单步 r_t 从累计 R_t 中拆出来，单步项可对整个词表求和，不只靠 Monte Carlo</td><td>Method Eq. (3), Appendix Eq. derivation, Fig. 9 消融</td></tr><tr><td>reward hacking</td><td>Teacher-Mixed Sampling</td><td>每步从 \(\widetilde{p}=\alpha p+(1-\alpha)q_\theta\) 采样，用教师混入减少劣质前缀；主实验 \(\alpha=0.2\)</td><td>Method Eq. (4), Appendix Fig. 14</td></tr><tr><td>长度偏置</td><td>Length Normalization</td><td>把后续累计奖励按剩余长度平均，避免模型学到空回复或过短回复</td><td>Method Eq. (6), Table 2 消融</td></tr><tr><td>遗忘通用能力</td><td>Pre-training Loss</td><td>像 RLHF 一样额外保留预训练语料语言建模损失</td><td>Algorithm 1, Appendix Table 5</td></tr>
+    </tbody>
+  </table>
+</div>
+<div class="equation">
+  <div class="equation-title">教师混合采样，对应论文 Eq. (4)</div>
+  <div class="equation-scroll">
+    <div class="equation-body">\[
+\widetilde{p}(y_t\mid y_{&lt;t},x)=\alpha\,p(y_t\mid y_{&lt;t},x)+(1-\alpha)\,q_{\theta}(y_t\mid y_{&lt;t},x)
+\]</div>
+  </div>
+  <div class="equation-explain">这不是把训练退回 teacher forcing。采样仍然包含学生分布，只是加入教师分布形成更可靠的探索分布；论文随后用 importance sampling 修正梯度，并在实践中近似权重以降低方差。</div>
+</div>
+<figure class="figure">
+  <img src="images/train2.png" alt="Reverse KLD curves for optimization strategy ablations">
+  <figcaption class="caption"><span class="caption-label">图 3 · Paper Fig. 9</span> 消融图显示 single-step decomposition 让训练曲线更稳；去掉 teacher-mixed 或 length normalization 时，reverse KLD 也可能下降，但论文报告模型会学到重复、短或无意义字符串，说明“目标下降”不等于“生成好”。</figcaption>
+</figure>
+</section>
+
+<section class="section" id="evidence">
+  <div class="chapter-kicker">第四章</div>
+  <h2>主结果怎么读：MiniLLM 几乎总赢，但赢法不是同一种</h2>
+  <p>实验设置是 instruction-following：用 databricks-dolly-15K 构造训练数据，过滤超长样本后约 12.5K 训练、1K 验证、0.5K 测试；评测包含 DollyEval、SelfInst、VicunaEval、S-NI 和 UnNI。指标包括 Rouge-L、GPT-4 feedback，以及 SelfInst 上的人类偏好。</p>
+<figure class="figure">
+  <img src="images/full_res_2.png" alt="Average GPT-4 feedback scores across model families">
+  <figcaption class="caption"><span class="caption-label">图 4 · Paper Fig. 1</span> 横轴是不同学生规模，纵轴是平均 GPT-4 feedback。三组教师分别为 GPT-2-1.5B、GPT-J-6B、OPT-13B。要注意的模式：MiniLLM 在不同学生规模上基本稳定高于 SeqKD，论文据此声称方法可扩展。</figcaption>
+</figure>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>模型家族</th><th>代表学生</th><th>最能说明问题的结果</th><th>应如何解读</th></tr></thead>
+    <tbody>
+      <tr><td>GPT-2</td><td>120M / 340M / 760M</td><td>120M MiniLLM 在 DollyEval GPT4 为 44.7，高于 SFT 38.6、KD 40.3、SeqKD 41.2；S-NI R-L 为 25.3，高于三个基线</td><td>小学生模型容量最紧，mode-seeking 的收益最明显；但 teacher 本身 GPT-2-1.5B 不强，绝对质量有限</td></tr><tr><td>OPT</td><td>1.3B / 2.7B / 6.7B</td><td>OPT-6.7B MiniLLM 在 DollyEval GPT4 为 70.8，略高于 13B teacher 的 70.3；UnNI R-L 为 36.7，高于 teacher 36.1</td><td>论文把个别学生超过教师解释为 exposure bias 被 on-policy 训练缓解；这更像特定评测设置下的相对优势，不宜外推成学生全面超过教师</td></tr><tr><td>LLaMA</td><td>7B</td><td>LLaMA-7B MiniLLM 在 SelfInst R-L 23.2，接近 13B teacher 的 23.4；VicunaEval R-L 20.7，高于 teacher 19.4</td><td>强基座上收益仍存在，说明方法不是只补弱模型；但主要结论仍依赖指令跟随任务</td></tr>
+    </tbody>
+  </table>
+</div>
+<p>Table 1 的细节比一句“全面超过 baseline”更有意思：GPT-4 feedback、Rouge-L、跨数据集泛化并不完全同向。MiniLLM 的强项更集中在开放回复与较长回复场景；对于很短的答案区间，论文在 length analysis 中承认各类 KD 差距变小。</p>
+<figure class="figure">
+  <img src="images/human_eval.png" alt="Human evaluation on SelfInst">
+  <figcaption class="caption"><span class="caption-label">图 5 · Paper Fig. 4</span> 人类评测基于 LLaMA 家族，在 SelfInst 随机抽 50 个 prompts。图中 MiniLLM 相对基线获得更多 win/tie，论文说它接近 teacher；但样本量和任务范围都应看作边界。</figcaption>
+</figure>
+</section>
+
+<section class="section" id="diagnostics">
+  <div class="chapter-kicker">第五章</div>
+  <h2>诊断实验让论点更可信：暴露偏差、校准、长回复和多样性</h2>
+  <p>论文没有只停在主表，而是用几组分析去解释为什么 on-policy reverse KL 有效果。最关键的是 exposure bias：teacher-forcing 训练在真实推理时要吃自己生成的前缀，一旦前缀偏离训练分布，误差会累积。MiniLLM 训练时采样学生回复，因此更接近推理状态。</p>
+<figure class="figure">
+  <img src="images/ex_acc_err.png" alt="Exposure bias excess accumulated error">
+  <figcaption class="caption"><span class="caption-label">图 6 · Paper Fig. 6</span> ExAccErr 随生成长度增长。基线曲线持续累积，MiniLLM 的误差更低，并在 150 token 以后不再明显累积。这个图支撑论文对 on-policy 训练的解释，但它基于 GPT-2-125M / GPT-2-1.5B / Dolly 测试设定。</figcaption>
+</figure>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>诊断维度</th><th>论文给出的证据</th><th>支撑的结论</th><th>仍需谨慎处</th></tr></thead>
+    <tbody>
+      <tr><td>校准</td><td>SST2/BoolQ 上 LLaMA-7B MiniLLM 的 ECE 低于 KD 与 SeqKD；例如 SST2 ECE 0.099，KD 0.191，SeqKD 0.243</td><td>reverse KL 可能减少学生对教师低概率区域的过度覆盖</td><td>只测两个分类数据集，且 teacher 校准仍最好</td></tr><tr><td>长回复</td><td>S-NI 按答案长度分组，≥6 tokens 时 MiniLLM 相对 SFT 优势更明显</td><td>开放空间越大，mode-seeking 相对 forward KL 越有优势</td><td>≤5 tokens 场景差距小，训练集长句分布也带来偏移</td></tr><tr><td>多样性</td><td>LLaMA 家族 Dolly/SelfInst Dist-4 与 test loss 接近 teacher/SFT；例如 Dolly Dist-4: teacher 99.3, MiniLLM 99.0</td><td>至少在论文度量下，MiniLLM 没有明显坍缩</td><td>Dist-4 与 loss 不能完整代表语义多样性</td></tr>
+    </tbody>
+  </table>
+</div>
+<figure class="figure">
+  <img src="images/length_sinst.png" alt="Rouge-L by S-NI response length">
+  <figcaption class="caption"><span class="caption-label">图 7 · Paper Fig. 7</span> S-NI 按 ground-truth 长度分组。论文的解释是：短答案空间小，forward/reverse KL 差别不大；长答案空间多峰，MiniLLM 更容易体现优势。这个图让方法假设和实验现象连起来。</figcaption>
+</figure>
+<figure class="figure">
+  <img src="images/alpha.png" alt="Teacher mix-in alpha ablation">
+  <figcaption class="caption"><span class="caption-label">图 8 · Appendix Fig. 14</span> α 控制 teacher-mixed sampling 强度。主实验用 α=0.2；附录显示较大模型对 α 更鲁棒。这里暴露了一个实现敏感点：MiniLLM 不是只换 KL 方向，采样分布也需要仔细调。</figcaption>
+</figure>
+</section>
+
+<section class="section" id="ledger">
+  <div class="chapter-kicker">第六章</div>
+  <h2>证据账本：哪些结论强，哪些只是合理推断</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>主张</th><th>来源位置</th><th>证据强度</th><th>限制/ caveat</th></tr></thead>
+    <tbody>
+      <tr><td>标准 KD 在生成式 LLM 上近似 forward KL，会鼓励学生覆盖教师分布的多模式</td><td>Introduction, Method Sec. 2</td><td>理论论证 + toy 图支持</td><td>forward KL 的具体实现包括 word-level 和 sequence-level 近似，实际训练细节会影响行为</td></tr><tr><td>reverse KL 更适合容量有限的学生，因为它追教师的主要模式</td><td>Method Sec. 2.1, Fig. 2/Fig. 3</td><td>理论解释 + 方法图支持 + 实验间接支持</td><td>mode-seeking 可能丢小模式；论文用多样性指标缓解疑虑，但未穷尽语义多样性</td></tr><tr><td>MiniLLM 在三类模型家族与五个评测集上总体优于 SFT/KD/SeqKD</td><td>Table 1, Fig. 1</td><td>强，跨规模/数据集的主实验支持</td><td>评测集中 instruction-following 占主导，GPT-4 feedback 也依赖特定 prompt 和当时模型</td></tr><tr><td>on-policy 训练降低 exposure bias</td><td>Analysis Sec. 4.3, Fig. 6, Appendix ExAccErr</td><td>中强，有专门指标支持</td><td>主要在 GPT-2-125M + Dolly 设置展示，是否普遍到所有模型/任务仍需更多验证</td></tr><tr><td>teacher-mixed sampling、length normalization、single-step decomposition 是必要稳定器</td><td>Ablation Sec. 4.4, Table 2, Fig. 9, Appendix Fig. 14</td><td>中强，消融支持</td><td>消融主要围绕 GPT-2-125M；更大规模训练成本下的系统性消融有限</td></tr>
+    </tbody>
+  </table>
+</div>
+<div class="callout"><span class="callout-label">我的推断</span>MiniLLM 的贡献可以拆成“目标函数选择”和“可训练性补丁”两层。只谈 reverse KL 会漏掉一半论文：没有 teacher-mixed、长度归一化和 single-step decomposition，目标函数会把训练推向高方差和奖励黑客。</div>
+</section>
+
+<section class="section" id="limits">
+  <div class="chapter-kicker">第七章</div>
+  <h2>限制与开放问题：MiniLLM 说服了什么，还没说服什么</h2>
+  <div class="qa"><div class="qa-row">
+  <div class="qa-question">这篇论文是否证明 reverse KL 总比 forward KL 好？</div>
+  <div class="qa-answer">没有。论文证明的是在这些生成式 instruction-following 设置下，reverse KL + on-policy 优化更适合容量有限学生。短答案、小输出空间或强约束任务里，差距可能缩小。</div>
+</div><div class="qa-row">
+  <div class="qa-question">MiniLLM 是否只是在做 RLHF 的蒸馏版本？</div>
+  <div class="qa-answer">相似但不等同。它没有人类奖励模型，而是把教师模型分布本身当作反馈信号；训练管线像 RLHF，但 reward 来自 teacher log-prob ratio。</div>
+</div><div class="qa-row">
+  <div class="qa-question">学生超过教师意味着什么？</div>
+  <div class="qa-answer">论文在部分 Rouge-L 或 GPT-4 feedback 设置中显示学生超过教师，并推测 on-policy 训练缓解 exposure bias。更谨慎的读法是：学生可能在这些评测协议下更贴近答案格式或减少生成错误，不代表总体能力超过教师。</div>
+</div><div class="qa-row">
+  <div class="qa-question">复现时最敏感的地方是什么？</div>
+  <div class="qa-answer">需要白盒教师 logits、on-policy 采样、importance weight 近似、teacher mix-in α、长度归一化和额外预训练损失。它不是简单把 loss 改成 \(\mathrm{KL}(q_\theta\|p)\) 就能复现。</div>
+</div></div>
+<div class="insight-grid"><div class="insight-card">
+  <div class="module-label">OPEN QUESTION</div>
+  <div class="insight-title">语义多样性怎样评估</div>
+  <div class="insight-text">论文用 Dist-4 和 test loss 说明没有明显多样性损失，但这仍偏表层。真正的语义覆盖、创造性和长尾任务能力需要更细评测。</div>
+</div><div class="insight-card">
+  <div class="module-label">OPEN QUESTION</div>
+  <div class="insight-title">teacher 分布质量如何影响学生</div>
+  <div class="insight-text">如果教师在某些区域过度自信或校准差，reverse KL 会更强地追主要模式，可能放大教师偏见。论文主要比较教师规模，不等于系统研究教师错误传播。</div>
+</div><div class="insight-card">
+  <div class="module-label">OPEN QUESTION</div>
+  <div class="insight-title">成本收益是否总划算</div>
+  <div class="insight-text">MiniLLM 要访问教师分布并进行 on-policy 训练。相对于 SeqKD 的离线文本微调，它的工程成本更高；在什么规模和部署场景下值得，是应用层要回答的问题。</div>
+</div><div class="insight-card">
+  <div class="module-label">NEXT READ</div>
+  <div class="insight-title">把它放进 f-divergence KD 脉络</div>
+  <div class="insight-text">论文 Related Work 提到并发的 GKD 与 f-divergence KD。下一步适合横向比较不同 divergence、采样策略和 reward 设计如何影响 LLM 蒸馏。</div>
+</div></div>
+<div class="divider" aria-hidden="true"><span></span><span></span><span></span></div>
+<p>一句话收束：MiniLLM 的可读性在于它把 LLM 蒸馏的“学生容量不足”问题转译成了 KL 方向问题，再用 on-policy 训练把理论目标落到可运行算法。它不是最便宜的蒸馏路径，却给了一个非常清楚的机制判断：在开放式生成里，小模型不必覆盖教师的一切，它更应该学会稳定地产生教师认可的主要回复。</p>
+</section>
+  </article>
+</body>
+</html>
