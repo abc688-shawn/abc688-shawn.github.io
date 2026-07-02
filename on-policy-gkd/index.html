@@ -1,0 +1,919 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>On-Policy GKD 论文精读</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%2320211d'/%3E%3Ctext x='32' y='39' text-anchor='middle' font-size='20' font-family='Arial' fill='%23fbfaf5'%3EG%3C/text%3E%3C/svg%3E">
+  <style>
+    :root {
+      --paper: #fbfaf5;
+      --paper-2: #f1f7f1;
+      --ink: #20211d;
+      --muted: #666b61;
+      --line: #d8ddd0;
+      --green: #1f7a67;
+      --green-dark: #0f4e42;
+      --rust: #bf563a;
+      --amber: #d6a72f;
+      --blue: #4d77a6;
+      --shadow: 0 22px 70px rgba(32, 33, 29, .12);
+      --mono: "SFMono-Regular", "Cascadia Mono", "Liberation Mono", monospace;
+      --serif: "Iowan Old Style", "Palatino Linotype", "Songti SC", "Noto Serif CJK SC", Georgia, serif;
+      --sans: "Avenir Next", "Gill Sans", "Trebuchet MS", "Microsoft YaHei", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(90deg, rgba(31, 122, 103, .05) 1px, transparent 1px) 0 0 / 28px 28px,
+        linear-gradient(180deg, rgba(191, 86, 58, .045) 1px, transparent 1px) 0 0 / 28px 28px,
+        var(--paper);
+      font-family: var(--serif);
+      line-height: 1.78;
+    }
+
+    a {
+      color: var(--green-dark);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 4px;
+    }
+
+    img {
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+
+    .progress {
+      position: fixed;
+      z-index: 20;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 5px;
+      background: rgba(32, 33, 29, .08);
+    }
+
+    .progress span {
+      display: block;
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--green), var(--rust), var(--amber));
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .rail {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: auto;
+      padding: 32px 24px 24px;
+      border-right: 1px solid var(--line);
+      background:
+        radial-gradient(circle at 15% 10%, rgba(31, 122, 103, .12), transparent 28%),
+        radial-gradient(circle at 95% 80%, rgba(214, 167, 47, .11), transparent 32%),
+        rgba(251, 250, 245, .86);
+      backdrop-filter: blur(12px);
+    }
+
+    .mark {
+      display: grid;
+      place-items: center;
+      width: 56px;
+      height: 56px;
+      margin-bottom: 22px;
+      border: 2px solid var(--ink);
+      border-radius: 50%;
+      color: var(--paper);
+      background: var(--ink);
+      font-family: var(--sans);
+      font-weight: 800;
+      letter-spacing: .04em;
+    }
+
+    .rail h2 {
+      margin: 0 0 8px;
+      font-family: var(--sans);
+      font-size: 18px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .rail .sub {
+      margin: 0 0 24px;
+      color: var(--muted);
+      font-family: var(--sans);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .toc {
+      display: grid;
+      gap: 4px;
+      margin: 26px 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .toc a {
+      display: block;
+      padding: 9px 11px;
+      border-left: 3px solid transparent;
+      color: var(--muted);
+      font-family: var(--sans);
+      font-size: 13px;
+      line-height: 1.2;
+      text-decoration: none;
+    }
+
+    .toc a:hover,
+    .toc a.active {
+      border-color: var(--green);
+      color: var(--ink);
+      background: rgba(31, 122, 103, .08);
+    }
+
+    .rail-card {
+      margin-top: 22px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, .56);
+      font-family: var(--sans);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .rail-card b {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--green-dark);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    main {
+      min-width: 0;
+      padding: 42px clamp(22px, 5vw, 72px) 80px;
+    }
+
+    .hero {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr);
+      gap: clamp(28px, 4vw, 56px);
+      align-items: end;
+      min-height: 82vh;
+      padding-bottom: 44px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .kicker {
+      margin: 0 0 18px;
+      color: var(--rust);
+      font-family: var(--sans);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 980px;
+      margin: 0;
+      font-size: clamp(44px, 8vw, 108px);
+      line-height: .94;
+      letter-spacing: 0;
+      font-weight: 800;
+    }
+
+    .dek {
+      max-width: 760px;
+      margin: 28px 0 0;
+      color: #373932;
+      font-size: clamp(19px, 2.1vw, 26px);
+      line-height: 1.55;
+    }
+
+    .hero-figure {
+      align-self: stretch;
+      display: grid;
+      align-content: end;
+      gap: 14px;
+    }
+
+    .figure-shell {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: white;
+      box-shadow: var(--shadow);
+    }
+
+    .figure-shell img {
+      width: 100%;
+      background: white;
+    }
+
+    .caption {
+      margin: 0;
+      color: var(--muted);
+      font-family: var(--sans);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .meta-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 30px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, .68);
+      color: #30322c;
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .content {
+      max-width: 1160px;
+      margin: 0 auto;
+    }
+
+    section {
+      scroll-margin-top: 24px;
+      padding: 64px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: 110px minmax(0, 1fr);
+      gap: 24px;
+      align-items: baseline;
+      margin-bottom: 28px;
+    }
+
+    .section-no {
+      color: var(--green);
+      font-family: var(--sans);
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: clamp(28px, 4.6vw, 56px);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 42px 0 14px;
+      color: #151611;
+      font-family: var(--sans);
+      font-size: clamp(20px, 2.1vw, 30px);
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    p {
+      max-width: 820px;
+      margin: 0 0 18px;
+      font-size: 18px;
+    }
+
+    .lead {
+      max-width: 900px;
+      font-size: clamp(20px, 2.4vw, 29px);
+      line-height: 1.55;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 22px;
+      margin-top: 24px;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      margin: 28px 0;
+    }
+
+    .card {
+      padding: 22px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, .72);
+      box-shadow: 0 8px 30px rgba(32, 33, 29, .06);
+    }
+
+    .card h3,
+    .card h4 {
+      margin: 0 0 10px;
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.25;
+    }
+
+    .card p,
+    .card li {
+      color: #41443b;
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.62;
+    }
+
+    .card p {
+      margin-bottom: 0;
+    }
+
+    .card.accent {
+      background: var(--green-dark);
+      color: white;
+    }
+
+    .card.accent p,
+    .card.accent li {
+      color: rgba(255, 255, 255, .88);
+    }
+
+    ul,
+    ol {
+      max-width: 850px;
+      margin: 14px 0 22px;
+      padding-left: 24px;
+      font-size: 18px;
+    }
+
+    li {
+      margin: 7px 0;
+    }
+
+    .formula {
+      max-width: 900px;
+      margin: 22px 0;
+      padding: 18px 20px;
+      border-left: 5px solid var(--green);
+      background: #11140f;
+      color: #f7f7ef;
+      font-family: var(--mono);
+      font-size: 15px;
+      line-height: 1.7;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    .callout {
+      max-width: 900px;
+      margin: 28px 0;
+      padding: 22px 24px;
+      border: 1px solid rgba(191, 86, 58, .32);
+      background: rgba(191, 86, 58, .08);
+    }
+
+    .callout strong {
+      color: var(--rust);
+      font-family: var(--sans);
+    }
+
+    .figure-block {
+      margin: 34px 0;
+      border: 1px solid var(--line);
+      background: white;
+      box-shadow: var(--shadow);
+    }
+
+    .figure-block img {
+      width: 100%;
+      padding: 14px;
+      background: white;
+    }
+
+    .figure-note {
+      display: grid;
+      gap: 6px;
+      padding: 16px 18px 18px;
+      border-top: 1px solid var(--line);
+      background: #fbfbf7;
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .figure-note b {
+      color: var(--green-dark);
+    }
+
+    .algorithm {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+      gap: 20px;
+      align-items: stretch;
+      margin-top: 24px;
+    }
+
+    .step-list {
+      counter-reset: steps;
+      display: grid;
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .step-list li {
+      counter-increment: steps;
+      position: relative;
+      margin: 0;
+      padding: 16px 16px 16px 54px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, .72);
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .step-list li::before {
+      content: counter(steps);
+      position: absolute;
+      top: 15px;
+      left: 16px;
+      display: grid;
+      place-items: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      color: white;
+      background: var(--green);
+      font-weight: 900;
+    }
+
+    .matrix {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      margin: 28px 0;
+      border: 1px solid var(--line);
+      background: var(--line);
+    }
+
+    .matrix div {
+      min-height: 120px;
+      padding: 16px;
+      background: rgba(255, 255, 255, .8);
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .matrix b {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--green-dark);
+      font-size: 15px;
+    }
+
+    .qa {
+      display: grid;
+      gap: 18px;
+      margin-top: 28px;
+    }
+
+    details {
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, .74);
+    }
+
+    summary {
+      cursor: pointer;
+      padding: 18px 20px;
+      color: var(--green-dark);
+      font-family: var(--sans);
+      font-size: 17px;
+      font-weight: 800;
+      line-height: 1.35;
+    }
+
+    details p {
+      padding: 0 20px 20px;
+      font-family: var(--serif);
+    }
+
+    .quote {
+      max-width: 900px;
+      margin: 28px 0;
+      padding: 28px;
+      color: white;
+      background:
+        linear-gradient(135deg, rgba(31, 122, 103, .98), rgba(15, 78, 66, .98)),
+        var(--green-dark);
+      box-shadow: var(--shadow);
+    }
+
+    .quote p {
+      margin: 0;
+      font-size: clamp(22px, 3vw, 36px);
+      line-height: 1.35;
+    }
+
+    .foot-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 28px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      min-height: 42px;
+      padding: 10px 14px;
+      border: 1px solid var(--ink);
+      color: var(--ink);
+      background: transparent;
+      font-family: var(--sans);
+      font-size: 13px;
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    .button.primary {
+      color: white;
+      background: var(--ink);
+    }
+
+    @media (max-width: 980px) {
+      .layout {
+        display: block;
+      }
+
+      .rail {
+        position: relative;
+        height: auto;
+        padding: 20px;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .toc {
+        display: flex;
+        overflow-x: auto;
+        gap: 8px;
+        margin: 14px 0 0;
+        padding-bottom: 4px;
+      }
+
+      .toc a {
+        white-space: nowrap;
+        border: 1px solid var(--line);
+        border-left: 1px solid var(--line);
+        background: rgba(255, 255, 255, .7);
+      }
+
+      .rail-card {
+        display: none;
+      }
+
+      main {
+        padding: 24px 18px 64px;
+      }
+
+      .hero {
+        grid-template-columns: 1fr;
+        min-height: auto;
+        padding-top: 20px;
+      }
+
+      .section-head {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+
+      .cards,
+      .two-col,
+      .algorithm,
+      .matrix {
+        grid-template-columns: 1fr;
+      }
+
+      .matrix div {
+        min-height: 0;
+      }
+    }
+
+    @media print {
+      .progress,
+      .rail {
+        display: none;
+      }
+
+      .layout {
+        display: block;
+      }
+
+      body {
+        background: white;
+      }
+
+      main {
+        padding: 0;
+      }
+
+      section {
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="progress" aria-hidden="true"><span id="progressBar"></span></div>
+  <div class="layout">
+    <aside class="rail">
+      <div class="mark">GKD</div>
+      <h2>On-Policy Distillation</h2>
+      <p class="sub">Learning from Self-Generated Mistakes<br>ICLR 2024 精读笔记</p>
+      <nav aria-label="章节目录">
+        <ul class="toc">
+          <li><a href="#tldr">TL;DR</a></li>
+          <li><a href="#motivation">背景动机</a></li>
+          <li><a href="#method">核心方法</a></li>
+          <li><a href="#divergence">散度选择</a></li>
+          <li><a href="#experiments">实验结论</a></li>
+          <li><a href="#qa">深度问答</a></li>
+          <li><a href="#summary">总结</a></li>
+        </ul>
+      </nav>
+      <div class="rail-card">
+        <b>阅读提示</b>
+        先看 TL;DR 和方法公式，再看 Figure 4 的质量-多样性权衡。理解 GKD 的关键不是“又一个 KD loss”，而是训练状态从固定答案切换到学生自己的轨迹。
+      </div>
+    </aside>
+
+    <main>
+      <article class="content">
+        <header class="hero">
+          <div>
+            <p class="kicker">Paper Reading Note</p>
+            <h1>让学生在自己的错误里学习</h1>
+            <p class="dek">这篇论文把语言模型蒸馏重新解释为 imitation learning：学生先生成答案，教师再在学生真实访问的前缀状态上给 token-level 反馈。GKD 的力量来自这个小小的位置移动。</p>
+            <div class="meta-strip">
+              <span class="pill">ICLR 2024</span>
+              <span class="pill">Google DeepMind / Mila / Toronto</span>
+              <span class="pill">约 18 分钟</span>
+              <span class="pill">难度 ★★★★</span>
+              <span class="pill">KD · KL/JSD · RLHF</span>
+            </div>
+          </div>
+          <div class="hero-figure">
+            <div class="figure-shell">
+              <img src="assets/fig1_result_overview.png" alt="GKD 在 XSum、WMT、GSM8K 上的主结果">
+            </div>
+            <p class="caption">Figure 1: on-policy GKD 在摘要、翻译、数学推理三个任务上，对不同学生模型尺寸都带来更大蒸馏增益。</p>
+          </div>
+        </header>
+
+        <section id="tldr">
+          <div class="section-head">
+            <div class="section-no">00</div>
+            <h2>TL;DR</h2>
+          </div>
+          <p class="lead">传统 KD 在固定答案序列上训练学生，但自回归推理时，学生会沿着自己生成的前缀继续预测。一旦早期 token 偏离训练集，后续状态也偏离，教师从未在这些状态上给过反馈。</p>
+          <p>Generalized Knowledge Distillation (GKD) 的做法是：让学生生成输出，再让教师在这些学生生成的前缀上提供 token-level 分布。它还把数据来源和散度函数都参数化，既能覆盖 supervised KD，也能得到纯 on-policy KD。</p>
+          <div class="cards">
+            <div class="card accent">
+              <h3>一句话直觉</h3>
+              <p>不要只让学生看标准答案，要让它把自己的草稿交给老师批改。</p>
+            </div>
+            <div class="card">
+              <h3>关键变量</h3>
+              <p><b>lambda</b> 控制学生生成数据比例；<b>D</b> 控制教师-学生分布之间的散度。</p>
+            </div>
+            <div class="card">
+              <h3>主结论</h3>
+              <p>on-policy 数据普遍有用；最佳散度依任务而变，不能一概默认 forward KL。</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="motivation">
+          <div class="section-head">
+            <div class="section-no">01</div>
+            <h2>背景动机</h2>
+          </div>
+          <p>语言模型蒸馏的目标是把大教师模型的能力压缩到小学生模型中。常见方法包括 supervised fine-tuning、sequence-level KD 和 supervised KD：前两者让学生拟合固定答案，后者让学生在固定答案路径上匹配教师 token 分布。</p>
+          <div class="callout"><strong>问题卡住的地方：</strong>这些固定路径不等于学生部署时会访问的路径。自回归模型第 n 步取决于前 n-1 个 token，早期一个小偏差会把后续状态带到训练分布外。</div>
+          <p>论文借用了 imitation learning 的视角。只学习专家轨迹的 learner 部署后会进入自己的状态分布，遇到专家没标注过的状态。GKD 则让学生主动暴露自己的轨迹，教师在这些轨迹上作为 interactive expert 给反馈。</p>
+          <div class="matrix" aria-label="蒸馏方法对比">
+            <div><b>Supervised FT</b>拟合人工标注答案，不需要教师概率，但信号只来自 ground truth。</div>
+            <div><b>SeqKD</b>先让教师生成固定答案，再让学生学习，教师生成成本高且路径固定。</div>
+            <div><b>Supervised KD</b>在固定答案路径上匹配教师 token-level 分布，信号丰富但仍有 exposure bias。</div>
+            <div><b>GKD</b>让学生生成路径，再请教师标注这些路径，更贴近推理状态。</div>
+          </div>
+        </section>
+
+        <section id="method">
+          <div class="section-head">
+            <div class="section-no">02</div>
+            <h2>核心方法</h2>
+          </div>
+          <p>设输入为 x，输出序列为 y，教师为 pT，学生为 pS(theta)。自回归模型在前缀 y&lt;n 和输入 x 下预测下一个 token 分布。</p>
+          <pre class="formula">D(pT || pS_theta)(y | x)
+  = (1 / Ly) * sum_{n=1}^{Ly}
+      D( pT(. | y&lt;n, x) || pS_theta(. | y&lt;n, x) )</pre>
+          <p>这里的散度不是只看最终答案，而是对序列中每个前缀状态计算教师和学生的分布差异。GKD 的总目标把固定数据和学生生成数据混合起来：</p>
+          <pre class="formula">L_GKD(theta)
+  = (1 - lambda) * E_{(x,y)~(X,Y)} [ D(pT || pS_theta)(y | x) ]
+    + lambda * E_{x~X} E_{y~pS(.|x)}
+      [ D(pT || pS_theta)(y | x) ]</pre>
+          <div class="algorithm">
+            <ol class="step-list">
+              <li>每个训练 step 抽一个随机数 u。</li>
+              <li>如果 u <= lambda，让学生对输入 x 生成输出 y。</li>
+              <li>否则，从固定数据集 (X, Y) 采样输入输出对。</li>
+              <li>教师在所选序列的每个前缀上给 token-level 概率。</li>
+              <li>用选定散度 D 更新学生，但不对采样过程反向传播。</li>
+            </ol>
+            <div class="figure-block" style="margin:0">
+              <img src="assets/alg1_method_gkd.png" alt="GKD Algorithm 1">
+              <div class="figure-note"><b>Algorithm 1</b> `lambda = 0` 是 supervised KD，`lambda = 1` 是纯 on-policy GKD，`lambda = 0.5` 接近 mixed imitation distillation。</div>
+            </div>
+          </div>
+          <h3>为什么不穿过采样反传？</h3>
+          <p>论文把学生采样看作收集训练状态，而不是 policy gradient。这样训练更像监督学习，方差低，也少了 sequence-level RL 中常见的长度偏置、reward hacking 和高方差稳定化问题。</p>
+        </section>
+
+        <section id="divergence">
+          <div class="section-head">
+            <div class="section-no">03</div>
+            <h2>散度选择</h2>
+          </div>
+          <p>GKD 另一个关键点是：蒸馏不一定只用 forward KL。不同散度带来的质量和多样性偏好不同，尤其当学生容量远小于教师时，这个差异会被放大。</p>
+          <div class="two-col">
+            <div class="card">
+              <h3>Forward KL</h3>
+              <p>偏 mode-covering。学生试图覆盖教师分布的支持集，可能更有多样性，但容量不足时容易给低质量 token 分配概率。</p>
+            </div>
+            <div class="card">
+              <h3>Reverse KL</h3>
+              <p>偏 mode-seeking。学生集中到教师高概率模式，质量可能更高，但输出多样性会下降。</p>
+            </div>
+          </div>
+          <pre class="formula">D_JSD(beta)(P || Q)
+  = beta * D_KL(P || beta P + (1 - beta) Q)
+    + (1 - beta) * D_KL(Q || beta P + (1 - beta) Q)</pre>
+          <p>JSD(beta) 在 forward KL 和 reverse KL 之间插值。beta 接近 0 时更像 forward KL，接近 1 时更像 reverse KL。</p>
+          <div class="figure-block">
+            <img src="assets/fig2_4_xsum_tradeoff.png" alt="XSum 上 GKD baseline、数据效率和质量多样性权衡">
+            <div class="figure-note">
+              <b>XSum 读图：</b>
+              on-policy GKD 在 5% 数据上、不使用 ground-truth summaries 的情况下超过完整数据的 supervised KD 和 ImitKD。散度从 forward KL 走向 reverse KL，多样性下降，高温采样下质量常常更高。
+            </div>
+          </div>
+          <div class="figure-block">
+            <img src="assets/figA16_mode_kl.png" alt="Forward KL 和 Reverse KL 的模式覆盖与模式寻找示意">
+            <div class="figure-note"><b>模式行为：</b>forward KL 更像覆盖多个模式，reverse KL 更像选择一个高概率模式。Instruction tuning 中，论文发现 reverse KL 明显更强。</div>
+          </div>
+        </section>
+
+        <section id="experiments">
+          <div class="section-head">
+            <div class="section-no">04</div>
+            <h2>实验结论</h2>
+          </div>
+          <p>教师主要是 supervised fine-tuned T5-XL，约 3B 参数；学生是 T5-small 77M、T5-base 250M、T5-large 800M。baseline 和 GKD 都从同一个 supervised fine-tuned student checkpoint 起步。</p>
+          <div class="cards">
+            <div class="card"><h3>XSum 摘要</h3><p>on-policy GKD 稳定优于 supervised KD、SeqKD、ImitKD、f-distill。高温采样下 JSD(0.9) 和 reverse KL 更有竞争力。</p></div>
+            <div class="card"><h3>WMT 翻译</h3><p>JSD 通常优于单纯 forward/reverse KL；纯 on-policy 或 mixed 数据优于只用固定 supervised 数据。</p></div>
+            <div class="card"><h3>GSM8K 推理</h3><p>学生生成 CoT 很关键。on-policy 数据比例超过 25% 后，性能通常随比例增加继续提升。</p></div>
+          </div>
+          <div class="figure-block">
+            <img src="assets/fig5_6_rl_wmt.png" alt="RLAIF 加 GKD 以及 WMT 消融">
+            <div class="figure-note">
+              <b>RL + GKD：</b>
+              RLAIF 优化事实一致性，GKD 保留教师能力。alpha 越高，蒸馏项越强，ROUGE-2 越高，但事实一致性增益下降。
+            </div>
+          </div>
+          <div class="figure-block">
+            <img src="assets/fig7_9_gsm8k.png" alt="GSM8K 上 GKD 消融和 baseline 对比">
+            <div class="figure-note">
+              <b>GSM8K：</b>
+              纯学生生成 CoT 通常比固定 CoT 或混合数据更强；on-policy GKD 在不同学生尺寸上都优于常见 KD baseline。
+            </div>
+          </div>
+          <div class="figure-block">
+            <img src="assets/fig10_instruction_tuning.png" alt="FLAN instruction tuning 在 MMLU 和 BBH 上的结果">
+            <div class="figure-note">
+              <b>Instruction tuning：</b>
+              使用 FLAN2021 训练，评估在 held-out MMLU 和 BBH。on-policy GKD with reverse KL 明显优于 supervised KD 和 ImitKD。
+            </div>
+          </div>
+        </section>
+
+        <section id="qa">
+          <div class="section-head">
+            <div class="section-no">05</div>
+            <h2>深度问答</h2>
+          </div>
+          <div class="qa">
+            <details open>
+              <summary>Q1: GKD 和 supervised KD 的本质差异是什么？</summary>
+              <p>Supervised KD 只在固定答案路径上问“学生能否模仿教师”。GKD 问的是“学生真实推理时会走到哪些状态，教师在这些状态上会怎么给概率”。这使训练状态更接近推理状态。</p>
+            </details>
+            <details open>
+              <summary>Q2: 为什么学生必须先经过 SFT？</summary>
+              <p>论文不从随机学生开始，而是从已 supervised fine-tuned 的学生开始。原因很朴素：学生生成需要达到教师可以有效反馈的质量。如果输出完全混乱，on-policy 轨迹上的 token-level 反馈不一定能形成有效学习信号。</p>
+            </details>
+            <details open>
+              <summary>Q3: 工程上该优先试哪个散度？</summary>
+              <p>如果是 instruction tuning 或希望聚焦核心行为，可以优先试 on-policy + reverse KL。如果是翻译，论文中 JSD(0.1) 很强。如果是摘要且使用高温采样，JSD(0.9) 或 reverse KL 值得试。最终仍要把散度当任务相关超参。</p>
+            </details>
+            <details open>
+              <summary>Q4: GKD 的成本是否值得？</summary>
+              <p>附录报告 GSM8K 上学生采样相对于固定输出训练带来约 1.8x、2x、2.2x 开销，对应学生/教师参数比 38x、12x、3.8x。它不是免费的，但如果目标是长期部署小模型，训练阶段多花一些成本通常比在线服务大教师便宜。</p>
+            </details>
+          </div>
+        </section>
+
+        <section id="summary">
+          <div class="section-head">
+            <div class="section-no">06</div>
+            <h2>总结</h2>
+          </div>
+          <div class="quote">
+            <p>GKD 最值得记住的不是新 loss，而是训练位置的转移：从标准答案路径，转到学生自己的推理路径。</p>
+          </div>
+          <h3>三条结论</h3>
+          <ul>
+            <li>自回归 LM 蒸馏的核心瓶颈之一是训练状态和推理状态不一致。</li>
+            <li>学生生成轨迹上的教师反馈，对摘要、翻译、推理、指令蒸馏都有效。</li>
+            <li>散度选择强烈依赖任务：forward KL、reverse KL、JSD 对质量和多样性的偏好不同。</li>
+          </ul>
+          <h3>边界条件</h3>
+          <ul>
+            <li>需要已有一定能力的学生模型，随机初始化不适合直接用。</li>
+            <li>长输出任务中 on-policy 采样会增加训练成本。</li>
+            <li>最优 lambda 和散度需要调参，论文没有给出一个全任务通吃的默认配置。</li>
+            <li>主要实验在 T5/FLAN-T5 上，迁移到 decoder-only LLM 或多模态自回归模型仍需更多验证。</li>
+          </ul>
+          <div class="foot-links">
+            <a class="button primary" href="on-policy-gkd-paper.pdf">打开原始 PDF</a>
+            <a class="button" href="https://arxiv.org/pdf/2306.13649">arXiv PDF</a>
+          </div>
+        </section>
+      </article>
+    </main>
+  </div>
+
+  <script>
+    const sections = [...document.querySelectorAll("section[id]")];
+    const links = [...document.querySelectorAll(".toc a")];
+    const progressBar = document.getElementById("progressBar");
+
+    function updateProgress() {
+      const scrollTop = window.scrollY || document.documentElement.scrollTop;
+      const height = document.documentElement.scrollHeight - window.innerHeight;
+      const pct = height > 0 ? Math.min(100, Math.max(0, (scrollTop / height) * 100)) : 0;
+      progressBar.style.width = pct + "%";
+
+      let activeId = sections[0]?.id;
+      for (const section of sections) {
+        if (section.getBoundingClientRect().top <= 140) activeId = section.id;
+      }
+      links.forEach((link) => {
+        link.classList.toggle("active", link.getAttribute("href") === "#" + activeId);
+      });
+    }
+
+    updateProgress();
+    window.addEventListener("scroll", updateProgress, { passive: true });
+    window.addEventListener("resize", updateProgress);
+  </script>
+</body>
+</html>

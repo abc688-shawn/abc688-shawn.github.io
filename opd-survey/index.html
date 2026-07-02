@@ -1,0 +1,991 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>A Survey of On-Policy Distillation for Large Language Models - 阅读笔记</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --paper: #f4f6f2;
+      --paper-2: #edf2ef;
+      --ink: #18211f;
+      --muted: #596662;
+      --line: #cbd5cc;
+      --teal: #0b756f;
+      --brick: #b84635;
+      --gold: #bb8a22;
+      --plum: #6e4e8f;
+      --blue: #2e668b;
+      --white: #ffffff;
+      --shadow: 0 18px 50px rgba(17, 28, 24, .12);
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(90deg, rgba(11,117,111,.07) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(184,70,53,.05) 1px, transparent 1px),
+        var(--paper);
+      background-size: 64px 64px, 64px 64px, auto;
+      font-family: "Iowan Old Style", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
+      line-height: 1.74;
+      letter-spacing: 0;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image: radial-gradient(rgba(24,33,31,.12) .55px, transparent .55px);
+      background-size: 5px 5px;
+      mix-blend-mode: multiply;
+      opacity: .16;
+      z-index: 4;
+    }
+
+    a { color: var(--teal); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    code, .mono {
+      font-family: "SF Mono", "Cascadia Code", "Menlo", monospace;
+      letter-spacing: 0;
+    }
+
+    .progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 0%;
+      height: 4px;
+      background: linear-gradient(90deg, var(--teal), var(--brick), var(--gold));
+      z-index: 20;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 270px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .layout > * { min-width: 0; }
+
+    aside {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 24px 22px;
+      border-right: 1px solid var(--line);
+      background: rgba(244, 246, 242, .88);
+      backdrop-filter: blur(14px);
+      overflow: auto;
+    }
+
+    .side-title {
+      font-family: "Avenir Next Condensed", "Songti SC", serif;
+      font-weight: 800;
+      line-height: 1.05;
+      font-size: 28px;
+      margin: 0 0 10px;
+      text-transform: uppercase;
+    }
+
+    .side-meta {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+      margin-bottom: 22px;
+    }
+
+    nav a {
+      display: block;
+      padding: 7px 0;
+      color: var(--ink);
+      font-size: 14px;
+      text-decoration: none;
+      border-bottom: 1px solid rgba(203, 213, 204, .7);
+    }
+    nav a:hover, nav a.active { color: var(--brick); }
+
+    .main {
+      max-width: 1180px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 40px clamp(18px, 4vw, 64px) 80px;
+      min-width: 0;
+    }
+
+    header {
+      min-height: 78vh;
+      display: grid;
+      align-content: center;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 34px;
+    }
+
+    .kicker {
+      width: fit-content;
+      color: var(--paper);
+      background: var(--ink);
+      padding: 4px 9px;
+      border-radius: 3px;
+      font-family: "SF Mono", monospace;
+      font-size: 12px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      margin-bottom: 18px;
+    }
+
+    h1, h2, h3 {
+      font-family: "Bodoni 72", "Songti SC", "Noto Serif CJK SC", Georgia, serif;
+      letter-spacing: 0;
+      line-height: 1.08;
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 92px;
+      max-width: 980px;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    .subtitle {
+      max-width: 780px;
+      margin: 22px 0 0;
+      font-size: 23px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .paper-facts {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(120px, 1fr));
+      gap: 10px;
+      margin-top: 34px;
+    }
+
+    .fact {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.55);
+      padding: 12px;
+      min-height: 84px;
+    }
+    .fact b {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      font-family: "SF Mono", monospace;
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+    .fact span { font-size: 14px; line-height: 1.35; display: block; }
+
+    section {
+      padding: 42px 0;
+      border-bottom: 1px solid var(--line);
+      scroll-margin-top: 18px;
+    }
+
+    h2 {
+      font-size: 48px;
+      margin-bottom: 18px;
+    }
+
+    h3 {
+      font-size: 30px;
+      margin: 30px 0 12px;
+    }
+
+    p { margin: 0 0 14px; }
+    .lead { font-size: 20px; color: var(--muted); max-width: 900px; }
+
+    .tldr {
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .note-panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.64);
+      box-shadow: var(--shadow);
+      padding: clamp(18px, 3vw, 28px);
+    }
+
+    .note-panel.hot {
+      background: linear-gradient(135deg, rgba(184,70,53,.12), rgba(11,117,111,.10)), rgba(255,255,255,.72);
+    }
+
+    .big-claim {
+      font-size: 34px;
+      line-height: 1.18;
+      font-weight: 800;
+      margin: 0;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+    .chip {
+      border: 1px solid rgba(24,33,31,.18);
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-family: "SF Mono", monospace;
+      font-size: 12px;
+      background: rgba(255,255,255,.64);
+      color: var(--ink);
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.58);
+      padding: 18px;
+    }
+    .card h3, .card h4 { margin-top: 0; }
+    .card h4 {
+      margin: 0 0 8px;
+      font-size: 17px;
+      font-family: "Avenir Next", "PingFang SC", sans-serif;
+      letter-spacing: 0;
+    }
+    .card p, .card li { font-size: 15px; }
+
+    .formula {
+      margin: 18px 0;
+      padding: 18px;
+      border-left: 5px solid var(--teal);
+      background: #fff;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      box-shadow: 0 12px 34px rgba(17,28,24,.08);
+      overflow-x: auto;
+    }
+    .formula .math {
+      font-size: 21px;
+      white-space: nowrap;
+      margin-bottom: 10px;
+    }
+    .formula small {
+      color: var(--muted);
+      display: block;
+      line-height: 1.65;
+    }
+
+    .diagram {
+      margin: 24px 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      overflow: hidden;
+    }
+    .diagram svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    figure {
+      margin: 26px 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      cursor: zoom-in;
+    }
+    figcaption {
+      padding: 12px 14px;
+      color: var(--muted);
+      font-size: 14px;
+      border-top: 1px solid var(--line);
+      background: rgba(237,242,239,.72);
+    }
+
+    .method-toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 18px 0 14px;
+    }
+    .method-toolbar input, .method-toolbar button {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      color: var(--ink);
+      padding: 10px 12px;
+      font: inherit;
+      font-size: 14px;
+    }
+    .method-toolbar input {
+      min-width: min(100%, 310px);
+      flex: 1;
+    }
+    .method-toolbar button {
+      cursor: pointer;
+      font-family: "SF Mono", monospace;
+    }
+    .method-toolbar button.active {
+      background: var(--ink);
+      color: var(--paper);
+    }
+
+    .method-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    .method {
+      position: relative;
+      min-height: 180px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px;
+      background: rgba(255,255,255,.68);
+      overflow: hidden;
+    }
+    .method::after {
+      content: attr(data-axis);
+      position: absolute;
+      right: 10px;
+      top: 9px;
+      color: rgba(24,33,31,.22);
+      font-family: "SF Mono", monospace;
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+    .method h4 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      line-height: 1.25;
+      max-width: 78%;
+    }
+    .method p { font-size: 14px; margin-bottom: 9px; }
+    .method .tag {
+      display: inline-block;
+      color: var(--paper);
+      background: var(--teal);
+      padding: 2px 7px;
+      border-radius: 3px;
+      font-family: "SF Mono", monospace;
+      font-size: 11px;
+      margin-right: 5px;
+    }
+    .method[data-axis="objective"] .tag { background: var(--teal); }
+    .method[data-axis="signal"] .tag { background: var(--plum); }
+    .method[data-axis="dynamics"] .tag { background: var(--brick); }
+
+    .decision {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 18px;
+    }
+    .lane {
+      border-top: 6px solid var(--teal);
+      background: rgba(255,255,255,.64);
+      border-radius: var(--radius);
+      padding: 14px;
+      border-left: 1px solid var(--line);
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+    .lane:nth-child(2) { border-top-color: var(--gold); }
+    .lane:nth-child(3) { border-top-color: var(--brick); }
+    .lane:nth-child(4) { border-top-color: var(--plum); }
+    .lane b { display: block; margin-bottom: 8px; }
+    .lane ul { padding-left: 18px; margin: 0; }
+    .lane li { margin: 7px 0; font-size: 14px; }
+
+    .qa {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .qa article {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      padding: 18px;
+    }
+    .qa h3 {
+      font-family: "Avenir Next", "PingFang SC", sans-serif;
+      font-size: 19px;
+      line-height: 1.35;
+      margin: 0 0 10px;
+    }
+
+    .takeaways {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    ul.clean {
+      margin: 0;
+      padding-left: 20px;
+    }
+    ul.clean li { margin: 8px 0; }
+
+    .quote {
+      font-size: 21px;
+      line-height: 1.55;
+      border-left: 5px solid var(--brick);
+      padding-left: 16px;
+      color: var(--ink);
+    }
+
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: 24px;
+      background: rgba(12,16,15,.82);
+      z-index: 30;
+    }
+    .lightbox.open { display: grid; }
+    .lightbox img {
+      max-width: min(96vw, 1600px);
+      max-height: 92vh;
+      background: #fff;
+      border-radius: var(--radius);
+    }
+
+    footer {
+      color: var(--muted);
+      font-size: 14px;
+      padding: 36px 0 10px;
+    }
+
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; }
+      aside {
+        position: relative;
+        height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      nav { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 18px; }
+      header { min-height: auto; padding: 22px 0 34px; }
+      h1 { font-size: 54px; }
+      h2 { font-size: 40px; }
+      h3 { font-size: 26px; }
+      .subtitle { font-size: 19px; }
+      .big-claim { font-size: 29px; }
+      .formula .math { font-size: 18px; }
+      .paper-facts, .grid-3, .method-grid, .decision, .qa, .takeaways, .tldr {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .main { padding-inline: 16px; }
+      h1 { font-size: 39px; }
+      h2 { font-size: 34px; }
+      h3 { font-size: 23px; }
+      .subtitle { font-size: 17px; }
+      .big-claim { font-size: 24px; }
+      nav { grid-template-columns: 1fr; }
+      .paper-facts { gap: 8px; }
+      .fact { min-height: auto; }
+      .method-toolbar { display: block; }
+      .method-toolbar input, .method-toolbar button {
+        width: 100%;
+        margin-bottom: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="progress" id="progress"></div>
+  <div class="layout">
+    <aside>
+      <p class="side-title">OPD<br>Reader</p>
+      <p class="side-meta">On-Policy Distillation for LLMs<br>论文阅读笔记 · 2026-07-02</p>
+      <nav id="toc">
+        <a href="#top">元信息</a>
+        <a href="#tldr">TL;DR</a>
+        <a href="#background">背景与动机</a>
+        <a href="#math">统一数学框架</a>
+        <a href="#taxonomy">方法地图</a>
+        <a href="#details">关键方法拆解</a>
+        <a href="#experiments">实验与证据</a>
+        <a href="#failures">失败模式</a>
+        <a href="#decision">工程决策</a>
+        <a href="#qa">深度问答</a>
+        <a href="#future">总结与展望</a>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <header id="top">
+        <div class="kicker">arXiv:2604.00626v4 · Survey</div>
+        <h1>A Survey of On-Policy Distillation for Large Language Models</h1>
+        <p class="subtitle">一篇把 OPD 从“若干训练技巧”整理成统一范式的综述：学生自己生成轨迹，教师在这些真实轨迹上反馈，目标是把离线模仿里的 exposure bias 改造成可训练、可诊断、可工程化的闭环。</p>
+        <div class="paper-facts" aria-label="论文元信息">
+          <div class="fact"><b>论文</b><span>A Survey of On-Policy Distillation for Large Language Models</span></div>
+          <div class="fact"><b>作者</b><span>Mingyang Song, Mao Zheng · Tencent</span></div>
+          <div class="fact"><b>版本</b><span>arXiv v4 · 2026-06-18</span></div>
+          <div class="fact"><b>阅读时长</b><span>约 25 分钟</span></div>
+          <div class="fact"><b>难度</b><span>专业级 4/5 · 需要 KD、RLHF、LLM 后训练基础</span></div>
+        </div>
+      </header>
+
+      <section id="tldr">
+        <h2>TL;DR</h2>
+        <div class="tldr">
+          <div class="note-panel hot">
+            <p class="big-claim">离线蒸馏让学生看“教师的完美前缀”；OPD 让学生在自己的错误轨迹上接受教师反馈。</p>
+            <div class="chips">
+              <span class="chip">f-divergence</span>
+              <span class="chip">student rollouts</span>
+              <span class="chip">KL-constrained RL</span>
+              <span class="chip">failure diagnostics</span>
+            </div>
+          </div>
+          <div class="note-panel">
+            <p>论文把 OPD 形式化为学生采样轨迹上的 f-divergence 最小化，并按三条设计轴整理文献：目标函数、信号来源、训练动态。最重要的结论不是“OPD 总是更好”，而是：当任务长、推理链复杂、学生会走出静态教师数据覆盖范围时，OPD 的额外算力才更可能换来质量。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="background">
+        <h2>背景与动机</h2>
+        <p class="lead">传统知识蒸馏训练学生匹配教师在固定数据上的分布。对自回归 LLM 来说，问题出在前缀：训练时前缀来自数据或教师，推理时前缀来自学生自己。</p>
+
+        <div class="grid-3">
+          <div class="card">
+            <h4>离线蒸馏的假设</h4>
+            <p>学生在 <span class="mono">y &lt; t</span> 这些“干净前缀”上学习下一个 token。只要推理时也总能处在这些状态附近，损失函数和部署分布就大致一致。</p>
+          </div>
+          <div class="card">
+            <h4>推理时的现实</h4>
+            <p>学生一旦早期生成偏离教师轨迹，后续状态就变成训练里很少见的前缀。推理越长，偏差越容易滚雪球。</p>
+          </div>
+          <div class="card">
+            <h4>OPD 的改法</h4>
+            <p>让学生当前策略 <span class="mono">pθ</span> 生成训练样本，再让教师对这些样本打分或给分布。训练分布随学生一起移动。</p>
+          </div>
+        </div>
+
+        <div class="formula">
+          <div class="math">Off-policy: &nbsp; L = E<sub>x,y~pdata</sub> Σ<sub>t</sub> D<sub>KL</sub>(p<sub>T</sub>(·|x,y<sub>&lt;t</sub>) || p<sub>θ</sub>(·|x,y<sub>&lt;t</sub>))</div>
+          <small>这里的前缀来自静态数据分布。论文用 DAgger 的直觉说明：若每步误差为 ε，离线模仿在长度 T 的轨迹上可能累积到 O(εT²)。</small>
+        </div>
+
+        <div class="formula">
+          <div class="math">On-policy: &nbsp; L = E<sub>y~pθ(·|x)</sub> [ L(y, x; θ, T) ]</div>
+          <small>外层期望变成学生自己的生成分布。教师不是只展示完美答案，而是在学生真实会到达的状态上提供反馈。</small>
+        </div>
+      </section>
+
+      <section id="math">
+        <h2>统一数学框架</h2>
+        <p>论文的关键整理是：许多看起来不同的 OPD 方法，都可以放进“学生轨迹采样 + 局部 f-divergence 匹配”这个骨架。</p>
+
+        <div class="diagram" aria-label="OPD training loop diagram">
+          <svg viewBox="0 0 980 360" role="img">
+            <defs>
+              <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L0,6 L9,3 z" fill="#18211f"></path>
+              </marker>
+            </defs>
+            <rect x="28" y="42" width="210" height="92" rx="8" fill="#e7efea" stroke="#0b756f"></rect>
+            <text x="133" y="78" text-anchor="middle" font-size="20" font-weight="700" fill="#18211f">Student policy pθ</text>
+            <text x="133" y="108" text-anchor="middle" font-size="15" fill="#596662">生成自己的 rollout</text>
+            <rect x="383" y="42" width="210" height="92" rx="8" fill="#fff5eb" stroke="#bb8a22"></rect>
+            <text x="488" y="78" text-anchor="middle" font-size="20" font-weight="700" fill="#18211f">Teacher / verifier</text>
+            <text x="488" y="108" text-anchor="middle" font-size="15" fill="#596662">在学生前缀上反馈</text>
+            <rect x="742" y="42" width="210" height="92" rx="8" fill="#f4ebf9" stroke="#6e4e8f"></rect>
+            <text x="847" y="78" text-anchor="middle" font-size="20" font-weight="700" fill="#18211f">Loss</text>
+            <text x="847" y="108" text-anchor="middle" font-size="15" fill="#596662">KL / reward / hybrid</text>
+            <path d="M238 88 C295 88 325 88 383 88" fill="none" stroke="#18211f" stroke-width="2" marker-end="url(#arrow)"></path>
+            <path d="M593 88 C650 88 684 88 742 88" fill="none" stroke="#18211f" stroke-width="2" marker-end="url(#arrow)"></path>
+            <path d="M846 134 C830 236 210 244 139 137" fill="none" stroke="#b84635" stroke-width="2" marker-end="url(#arrow)"></path>
+            <rect x="99" y="228" width="790" height="86" rx="8" fill="#ffffff" stroke="#cbd5cc"></rect>
+            <text x="494" y="263" text-anchor="middle" font-size="22" font-weight="700" fill="#18211f">核心变化：训练数据分布从 pdata / pT 变成 pθ</text>
+            <text x="494" y="293" text-anchor="middle" font-size="16" fill="#596662">目标函数、信号来源、稳定策略只是围绕这个闭环的不同设计选择</text>
+          </svg>
+        </div>
+
+        <h3>f-divergence 视角</h3>
+        <div class="formula">
+          <div class="math">D<sub>f</sub>(P || Q) = E<sub>y~Q</sub> [ f(P(y) / Q(y)) ]</div>
+          <small><span class="mono">f</span> 是凸函数，决定梯度如何看待教师和学生的概率比。换不同的 <span class="mono">f</span>，就得到 Forward KL、Reverse KL、JSD、α-divergence 等不同几何。</small>
+        </div>
+
+        <figure>
+          <img src="assets/fig2_kl_tradeoff.png" alt="Forward KL 和 Reverse KL 的模式覆盖与模式寻优差异">
+          <figcaption>论文 Figure 2：Forward KL 倾向覆盖教师的多个模式，但可能在模式之间产生“混合幻觉”；Reverse KL 倾向选择一个高质量模式，但会丢掉其他有效解。</figcaption>
+        </figure>
+
+        <div class="grid-3">
+          <div class="card">
+            <h4>Forward KL</h4>
+            <p>偏 mode-covering。适合开放式生成、翻译、摘要这类多个答案都合理的场景；风险是学生容量不够时会把多个模式糊在一起。</p>
+          </div>
+          <div class="card">
+            <h4>Reverse KL</h4>
+            <p>偏 mode-seeking。适合数学、代码、结构化输出这类更需要收敛到正确路径的场景；风险是 Pass@1 上升但 Pass@k 多样性下降。</p>
+          </div>
+          <div class="card">
+            <h4>Adaptive</h4>
+            <p>同一条序列里，运算符 token 和连接词 token 的分布形状不同。EOPD、AOPD 这类方法按 token 局部状态切换损失。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="taxonomy">
+        <h2>方法地图</h2>
+        <p class="lead">论文没有按“像不像”分类，而是按训练管线中的三个决定分类：优化什么、信号从哪里来、训练如何稳定和省算力。</p>
+        <figure>
+          <img src="assets/fig1_taxonomy.png" alt="On-Policy Distillation 方法分类树">
+          <figcaption>论文 Figure 1：OPD 方法按目标函数、信号来源和训练动态三条轴展开。图中字小，点击可放大查看。</figcaption>
+        </figure>
+
+        <div class="grid-3">
+          <div class="card">
+            <h4>Axis 1: Objective</h4>
+            <p>固定 divergence、按 token 自适应 divergence、RL-augmented objective。它回答“学生到底在优化什么”。</p>
+          </div>
+          <div class="card">
+            <h4>Axis 2: Signal</h4>
+            <p>白盒 logits、黑盒 API、self-distillation、privileged information、verifier feedback。它回答“教师信号从哪里来”。</p>
+          </div>
+          <div class="card">
+            <h4>Axis 3: Dynamics</h4>
+            <p>token weighting、curriculum、prefix truncation、offline cache、teacher refresh。它回答“这个闭环怎样不坏、怎样不贵”。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="details">
+        <h2>关键方法拆解</h2>
+        <p class="lead">这篇综述覆盖的工作很多，真正需要记住的是每类方法解决的“局部痛点”。下面是高频方法的速查版。</p>
+
+        <div class="method-toolbar">
+          <input id="methodSearch" type="search" placeholder="搜索方法、关键词或场景">
+          <button data-filter="all" class="active">ALL</button>
+          <button data-filter="objective">OBJECTIVE</button>
+          <button data-filter="signal">SIGNAL</button>
+          <button data-filter="dynamics">DYNAMICS</button>
+        </div>
+
+        <div class="method-grid" id="methodGrid">
+          <article class="method" data-axis="objective">
+            <h4>GKD</h4>
+            <p><span class="tag">fixed</span>用 <span class="mono">πmix = λpθ + (1-λ)pdata</span> 在离线和纯 on-policy 之间插值，可测试 FKL、RKL、JSD。</p>
+            <p>意义：把 DAgger 式 on-policy imitation 正式带入 LLM 蒸馏。</p>
+          </article>
+          <article class="method" data-axis="objective">
+            <h4>MiniLLM</h4>
+            <p><span class="tag">sequence</span>把 Reverse KL 提到序列级，用 REINFORCE 处理学生分布在期望内部的问题。</p>
+            <p>意义：说明序列级蒸馏和 policy gradient RL 其实挨得很近。</p>
+          </article>
+          <article class="method" data-axis="objective">
+            <h4>DistiLLM</h4>
+            <p><span class="tag">stability</span>使用 Skew KL，把目标分布替换成教师和学生的混合，避免 KL 零概率爆炸。</p>
+            <p>意义：用数值稳定性工程解决纯 KL 在 on-policy 探索中的脆弱性。</p>
+          </article>
+          <article class="method" data-axis="objective">
+            <h4>EOPD / AOPD</h4>
+            <p><span class="tag">adaptive</span>EOPD 按教师熵决定 FKL/RKL 混合；AOPD 按 advantage 符号在 policy gradient 和局部 FKL 间切换。</p>
+            <p>意义：从“选哪个 KL”推进到“哪个 token 用哪个 KL”。</p>
+          </article>
+          <article class="method" data-axis="objective">
+            <h4>G-OPD</h4>
+            <p><span class="tag">RL</span>把 OPD 写成 dense KL-constrained RL；当放大教师相对参考策略的 log-ratio 奖励时，学生可能探索到教师低概率但高回报的解。</p>
+            <p>意义：把 distillation ceiling 和 RL exploration 接起来。</p>
+          </article>
+          <article class="method" data-axis="signal">
+            <h4>White-box Logits</h4>
+            <p><span class="tag">dense</span>每个 token 得到完整词表分布，信号密度最高，适合同组织、同 tokenizer 或可做跨 tokenizer 对齐的训练。</p>
+            <p>代价：教师 co-host、全词表 logits 传输、显存压力。</p>
+          </article>
+          <article class="method" data-axis="signal">
+            <h4>Black-box OPD</h4>
+            <p><span class="tag">API</span>无法拿 logits 时，用文本 critique、分数、rubric、adversarial discriminator 等替代稠密分布。</p>
+            <p>意义：牺牲信号密度，换取可使用闭源强教师的部署灵活性。</p>
+          </article>
+          <article class="method" data-axis="signal">
+            <h4>OPSD</h4>
+            <p><span class="tag">self PI</span>同一个模型在训练时看 ground-truth answer，形成 PI-conditioned self-teacher；部署时学生只看原问题。</p>
+            <p>论文特别提醒：它更像“压缩已会的正确轨迹”，不稳定承担“纠正错误轨迹”。</p>
+          </article>
+          <article class="method" data-axis="signal">
+            <h4>SD-ZERO / SDPO</h4>
+            <p><span class="tag">feedback</span>把 verifier 的二元结果、单元测试错误或文本反馈转成 dense self-supervision。</p>
+            <p>意义：给 self-distillation 加外部锚点，避免只强化自己的偏见。</p>
+          </article>
+          <article class="method" data-axis="dynamics">
+            <h4>TIP / SCOPE</h4>
+            <p><span class="tag">weight</span>TIP 用学生熵和师生 divergence 找出重要 token；SCOPE 按 rollout 正误走不同损失路径。</p>
+            <p>意义：不是每个 token 的教师信号都可靠，尤其在错误前缀之后。</p>
+          </article>
+          <article class="method" data-axis="dynamics">
+            <h4>PACED / TCOD</h4>
+            <p><span class="tag">curriculum</span>PACED 把训练集中在学生 pass rate 居中的题；TCOD 逐渐扩大多轮轨迹中接受监督的深度。</p>
+            <p>意义：避免太难无梯度、太易无信息、太深教师信号失真。</p>
+          </article>
+          <article class="method" data-axis="dynamics">
+            <h4>FOPD / Lightning-OPD</h4>
+            <p><span class="tag">compute</span>FOPD 只对早期高信息密度 token 做 on-policy；Lightning-OPD 预计算教师 log-prob 降低在线教师成本。</p>
+            <p>意义：把“必须全程 on-policy”改成可调的 fidelity-efficiency frontier。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="experiments">
+        <h2>实验与证据怎么读</h2>
+        <p>这是一篇综述，没有统一复现实验，因此不能把表格里的不同方法直接横向当 leaderboard。更合理的读法是提炼跨论文反复出现的证据模式。</p>
+        <div class="takeaways">
+          <div class="note-panel">
+            <h3>反复出现的正信号</h3>
+            <ul class="clean">
+              <li>推理、代码、多步 agent 任务更容易从 OPD 受益，因为错误前缀会显著改变后续状态分布。</li>
+              <li>固定 KL 不是终点：EOPD、AOPD、TIP 这类局部自适应方法通常能更好利用 token 级信号。</li>
+              <li>工业系统趋向混合流程：先用 off-policy SFT 建立分布重叠，再用 OPD 或 RL 做最后质量提升。</li>
+            </ul>
+          </div>
+          <div class="note-panel">
+            <h3>需要克制解读的地方</h3>
+            <ul class="clean">
+              <li>表中方法使用不同 base model、算力预算、rollout 数、benchmark 版本，论文也明确提醒 cross-row 对比不可靠。</li>
+              <li>DeepSeek-R1 这种纯 off-policy 成功不是反例，而是边界条件：超强教师和足够多样的静态 CoT traces 可以把 off-policy ceiling 推得很高。</li>
+              <li>OPD 提高准确率不等于提高校准；论文特别强调 calibration-capability gap。</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="failures">
+        <h2>失败模式</h2>
+        <p class="lead">这篇综述最实用的部分，是把 OPD 会坏在哪里讲得很具体。下面这些模式基本就是调 OPD pipeline 的排查清单。</p>
+        <div class="grid-3">
+          <div class="card">
+            <h4>Flawed Prefix Trap</h4>
+            <p>学生早期生成错 token 后，教师被迫在 OOD 前缀上给分布。这个分布可能并不可靠，直接匹配会把错误扩散。</p>
+          </div>
+          <div class="card">
+            <h4>Gradient SNR Collapse</h4>
+            <p>学生对某类题几乎全错或几乎全对时，梯度信息都很弱。PACED 的边界难度采样就是为这个问题服务。</p>
+          </div>
+          <div class="card">
+            <h4>Diversity Collapse</h4>
+            <p>过强 Reverse KL 会让 Pass@1 变好但 Pass@k 变差，学生只保留一条固定解题路径。</p>
+          </div>
+          <div class="card">
+            <h4>Calibration Gap</h4>
+            <p>OPD 可能让模型更会做题，却更不知道自己什么时候错。安全和高风险场景不能只看 accuracy。</p>
+          </div>
+          <div class="card">
+            <h4>Self-play Saturation</h4>
+            <p>纯 self-distillation 容易强化已有偏见。没有 verifier 或 PI 时，模型很难知道自己的高置信错误是错误。</p>
+          </div>
+          <div class="card">
+            <h4>Agentic Collapse</h4>
+            <p>多轮 agent 中，错误 action 会改变环境状态；教师监督、轨迹结构和奖励粒度必须一起设计。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="decision">
+        <h2>工程决策框架</h2>
+        <p class="quote">OPD 不是“更高级的蒸馏默认项”，而是一笔算力投资：只有当静态数据覆盖不了学生未来会访问的状态时，这笔投资才更可能划算。</p>
+
+        <div class="decision">
+          <div class="lane">
+            <b>继续 off-policy SFT</b>
+            <ul>
+              <li>教师远强于学生，且静态 traces 足够多样</li>
+              <li>任务推理深度有限：翻译、摘要、事实 QA</li>
+              <li>算力紧张，部署目标是稳定压缩</li>
+            </ul>
+          </div>
+          <div class="lane">
+            <b>切到 OPD</b>
+            <ul>
+              <li>任务有长链推理、代码、agent 决策</li>
+              <li>off-policy loss 已平台化，但 on-policy reward 仍可涨</li>
+              <li>学生足够强，会探索静态 traces 外的状态</li>
+            </ul>
+          </div>
+          <div class="lane">
+            <b>用 KD + RL 混合</b>
+            <ul>
+              <li>既需要教师 dense guidance，又希望突破教师上限</li>
+              <li>有可靠 verifier 或 outcome reward</li>
+              <li>需要信号稳定性和探索能力兼得</li>
+            </ul>
+          </div>
+          <div class="lane">
+            <b>先做诊断</b>
+            <ul>
+              <li>检查 teacher-student top-k overlap</li>
+              <li>检查学生 pass rate 是否在可学习区间</li>
+              <li>监控长度、校准、教师在学生前缀上的可靠性</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3>推荐管线</h3>
+        <div class="formula">
+          <div class="math">Off-policy warmup → On-policy KL refinement → Reward-guided refinement</div>
+          <small>论文认为这已经成为 Qwen3、DeepSeek-V4、MiMo-V2-Flash 等大规模系统的共同形态：先建立分布重叠，再在学生真实轨迹上修正，最后用奖励信号推动超越教师。</small>
+        </div>
+      </section>
+
+      <section id="qa">
+        <h2>深度理解问答</h2>
+        <div class="qa">
+          <article>
+            <h3>Q1: OPD 和普通 KD 的本质区别是什么？</h3>
+            <p>不是 KL 损失本身，而是训练样本来自哪里。普通 KD 在固定数据或教师生成 traces 上训练；OPD 让学生当前策略生成样本，再让教师对这些样本反馈。换句话说，OPD 把“模仿答案”变成“在自己的状态分布里练习纠错”。</p>
+          </article>
+          <article>
+            <h3>Q2: 为什么 DAgger 的 O(εT²) 直觉对 LLM 有帮助但不能照搬？</h3>
+            <p>它解释了长序列中错误会随轨迹长度放大的几何原因。但 LLM 的教师并不一定能在任意学生错误前缀上给出可靠专家动作；学生前缀太离谱时，教师自己的条件分布也可能失真。这正是 flawed prefix trap。</p>
+          </article>
+          <article>
+            <h3>Q3: Forward KL 和 Reverse KL 应该怎么选？</h3>
+            <p>如果任务允许多个风格或答案，需要覆盖教师分布，Forward KL 更自然。如果任务要求收敛到正确证明、代码路径或格式，Reverse KL 更自然。论文强调更好的答案通常不是二选一，而是按 token、按阶段、按样本动态切换。</p>
+          </article>
+          <article>
+            <h3>Q4: 为什么 OPD 和 RL 越来越像？</h3>
+            <p>MiniLLM 已经把 sequence-level Reverse KL 写成 policy gradient；G-OPD 进一步把标准 OPD 连接到 KL-constrained RL。区别主要在信号来源：KD 用教师分布，RL 用 reward。混合方法则把教师信号当低方差密集指导，把奖励当突破教师上限的方向。</p>
+          </article>
+          <article>
+            <h3>Q5: Self-distillation 能不能创造新能力？</h3>
+            <p>纯 self-distillation 的上限很明显：它大多重排、压缩或校准模型已有能力。要稳定产生更强能力，通常需要 verifier、环境反馈、privileged information 或多模型 co-evolution，否则容易自我饱和。</p>
+          </article>
+          <article>
+            <h3>Q6: 工程上最大的成本在哪里？</h3>
+            <p>白盒 OPD 的成本来自三块：学生自回归 rollout、教师 forward scoring、学生 backward update。长序列下 rollout 串行性很重；大教师下 scoring 和 logits 传输很重。因此 FOPD、Lightning-OPD、SKD、teacher quantization、logit offload 都是核心工程议题。</p>
+          </article>
+          <article>
+            <h3>Q7: 什么时候 OPD 可能不值得？</h3>
+            <p>如果任务短、教师极强且静态 traces 覆盖充分，off-policy SFT 可能已经接近上限。DeepSeek-R1 distilled students 的成功说明，在某些条件下纯 off-policy 可以非常强。OPD 更适合用在静态数据无法覆盖学生未来状态的地方。</p>
+          </article>
+          <article>
+            <h3>Q8: 这篇综述最值得继续追的问题是什么？</h3>
+            <p>三个问题最关键：OPD scaling laws 还没建立，无法系统回答教师大小、学生大小、rollout 预算如何分配；教师 uncertainty 尚未被充分利用；agent-level distillation 的长期信用分配和安全探索仍很粗糙。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="future">
+        <h2>总结与思考</h2>
+        <div class="takeaways">
+          <div class="note-panel">
+            <h3>核心贡献</h3>
+            <ul class="clean">
+              <li>把 OPD 明确定义为学生当前策略生成训练数据，而不是静态数据蒸馏。</li>
+              <li>用 f-divergence 框架统一 Forward KL、Reverse KL、JSD、adaptive divergence 等方法。</li>
+              <li>按目标函数、信号来源、训练动态三条轴给出可操作的文献地图。</li>
+              <li>把失败模式和工程决策纳入综述，而不只堆方法名。</li>
+            </ul>
+          </div>
+          <div class="note-panel">
+            <h3>局限与边界</h3>
+            <ul class="clean">
+              <li>作为综述，方法表不是统一复现实验，数字不能直接当公平比较。</li>
+              <li>许多 2026 方法仍是早期论文，真实工业可复用性需要时间验证。</li>
+              <li>OPD 可能牺牲校准、多样性和 off-metric capability，部署评价必须更细。</li>
+              <li>算力成本仍高，真正的 scaling law 和最小 on-policy 数据需求还未清楚。</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3>一句话带走</h3>
+        <p class="quote">当学生只会模仿教师写好的轨迹时，它学不到如何从自己的岔路上回来；OPD 的价值就在于把这些岔路纳入训练分布。</p>
+      </section>
+
+      <footer>
+        <p>基于 <a href="https://arxiv.org/abs/2604.00626v4">arXiv:2604.00626v4</a> 和本地 PDF 解析整理。图 1、图 2 裁自原论文 PDF，仅用于阅读笔记中的说明。</p>
+      </footer>
+    </main>
+  </div>
+
+  <div class="lightbox" id="lightbox" aria-hidden="true">
+    <img alt="">
+  </div>
+
+  <script>
+    const progress = document.getElementById('progress');
+    const links = [...document.querySelectorAll('#toc a')];
+    const sections = links.map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+
+    function onScroll() {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      progress.style.width = max > 0 ? `${(window.scrollY / max) * 100}%` : '0%';
+      const current = sections.reduce((acc, section) => {
+        return section.getBoundingClientRect().top < 130 ? section.id : acc;
+      }, sections[0]?.id);
+      links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === `#${current}`));
+    }
+    document.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+
+    const search = document.getElementById('methodSearch');
+    const buttons = [...document.querySelectorAll('.method-toolbar button')];
+    const methods = [...document.querySelectorAll('.method')];
+    let filter = 'all';
+
+    function filterMethods() {
+      const q = search.value.trim().toLowerCase();
+      methods.forEach(card => {
+        const axisOK = filter === 'all' || card.dataset.axis === filter;
+        const textOK = !q || card.textContent.toLowerCase().includes(q);
+        card.style.display = axisOK && textOK ? '' : 'none';
+      });
+    }
+    search.addEventListener('input', filterMethods);
+    buttons.forEach(button => {
+      button.addEventListener('click', () => {
+        buttons.forEach(b => b.classList.remove('active'));
+        button.classList.add('active');
+        filter = button.dataset.filter;
+        filterMethods();
+      });
+    });
+
+    const lightbox = document.getElementById('lightbox');
+    const lightboxImg = lightbox.querySelector('img');
+    document.querySelectorAll('figure img').forEach(img => {
+      img.addEventListener('click', () => {
+        lightboxImg.src = img.src;
+        lightboxImg.alt = img.alt;
+        lightbox.classList.add('open');
+        lightbox.setAttribute('aria-hidden', 'false');
+      });
+    });
+    lightbox.addEventListener('click', () => {
+      lightbox.classList.remove('open');
+      lightbox.setAttribute('aria-hidden', 'true');
+      lightboxImg.src = '';
+    });
+  </script>
+</body>
+</html>

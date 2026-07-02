@@ -1,0 +1,1251 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TCOD 论文阅读笔记</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='8' fill='%23171512'/%3E%3Cpath d='M12 17h40v7H36v25h-8V24H12z' fill='%23f8f1e4'/%3E%3Cpath d='M46 41h7v8h-7z' fill='%23c65f1a'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f8f1e4;
+      --paper-2: #fffaf1;
+      --ink: #171512;
+      --muted: #6b6257;
+      --line: #241f1826;
+      --line-strong: #241f1842;
+      --violet: #4b2e83;
+      --cyan: #0f766e;
+      --amber: #c65f1a;
+      --red: #a9363e;
+      --blue: #2463a6;
+      --green: #4a7c2f;
+      --shadow: 0 24px 70px rgba(40, 31, 20, .16);
+      --radius: 8px;
+      --serif: "Songti SC", "STSong", "Noto Serif CJK SC", "Iowan Old Style", Georgia, serif;
+      --sans: "Avenir Next", "Gill Sans", "Trebuchet MS", sans-serif;
+      --mono: "SFMono-Regular", "Cascadia Mono", "Menlo", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        linear-gradient(90deg, rgba(23, 21, 18, .045) 1px, transparent 1px) 0 0 / 30px 30px,
+        linear-gradient(rgba(23, 21, 18, .035) 1px, transparent 1px) 0 0 / 30px 30px,
+        radial-gradient(circle at 82% 9%, rgba(198, 95, 26, .2), transparent 28rem),
+        radial-gradient(circle at 8% 68%, rgba(15, 118, 110, .15), transparent 26rem),
+        var(--paper);
+      font-family: var(--sans);
+      line-height: 1.72;
+    }
+
+    a {
+      color: inherit;
+      text-decoration-color: rgba(15, 118, 110, .45);
+      text-decoration-thickness: 2px;
+      text-underline-offset: 4px;
+    }
+
+    img {
+      display: block;
+      max-width: 100%;
+    }
+
+    .progress {
+      position: fixed;
+      inset: 0 auto auto 0;
+      z-index: 50;
+      height: 4px;
+      width: 100%;
+      transform-origin: 0 50%;
+      transform: scaleX(0);
+      background: linear-gradient(90deg, var(--cyan), var(--amber), var(--violet));
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: minmax(220px, 290px) minmax(0, 1fr);
+      gap: clamp(24px, 4vw, 56px);
+      width: min(1480px, 100%);
+      margin: 0 auto;
+      padding: 28px clamp(18px, 3vw, 42px) 72px;
+    }
+
+    .rail {
+      position: sticky;
+      top: 24px;
+      align-self: start;
+      min-height: calc(100vh - 48px);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: rgba(255, 250, 241, .82);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+      overflow: hidden;
+    }
+
+    .rail-head {
+      padding: 22px 20px 18px;
+      background: #171512;
+      color: #fff7e8;
+      border-bottom: 5px solid var(--amber);
+    }
+
+    .rail-kicker {
+      margin: 0 0 8px;
+      color: #ffce8c;
+      font: 700 12px / 1.2 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: .12em;
+    }
+
+    .rail-title {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(24px, 3vw, 36px);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    .rail-sub {
+      margin: 13px 0 0;
+      color: rgba(255, 247, 232, .72);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .toc {
+      padding: 14px;
+    }
+
+    .toc a {
+      display: grid;
+      grid-template-columns: 32px 1fr;
+      align-items: center;
+      gap: 10px;
+      min-height: 44px;
+      padding: 9px 10px;
+      border-radius: 6px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      line-height: 1.25;
+    }
+
+    .toc a:hover,
+    .toc a.active {
+      background: #171512;
+      color: #fff8eb;
+    }
+
+    .toc-num {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border: 1px solid currentColor;
+      border-radius: 50%;
+      font: 700 11px / 1 var(--mono);
+    }
+
+    .rail-foot {
+      padding: 16px 18px 20px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    main {
+      min-width: 0;
+    }
+
+    .hero {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(330px, .92fr);
+      gap: clamp(22px, 4vw, 46px);
+      min-height: 76vh;
+      align-items: end;
+      padding: clamp(34px, 5vw, 72px) 0 clamp(22px, 5vw, 50px);
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 18px 0 auto auto;
+      width: min(34vw, 390px);
+      height: 7px;
+      background: repeating-linear-gradient(90deg, var(--ink) 0 18px, transparent 18px 28px, var(--amber) 28px 46px, transparent 46px 58px);
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+      color: var(--cyan);
+      font: 800 12px / 1.2 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: .16em;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 38px;
+      height: 2px;
+      background: currentColor;
+    }
+
+    h1, h2, h3 {
+      margin: 0;
+      font-family: var(--serif);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      max-width: 980px;
+      font-size: clamp(44px, 8vw, 108px);
+      font-weight: 900;
+    }
+
+    h1 .mark {
+      color: var(--violet);
+      text-shadow: 3px 3px 0 rgba(198, 95, 26, .25);
+    }
+
+    .lead {
+      max-width: 760px;
+      margin: 24px 0 0;
+      color: #332d25;
+      font-size: clamp(18px, 2vw, 24px);
+      line-height: 1.62;
+    }
+
+    .meta-strip {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 30px;
+    }
+
+    .meta-item,
+    .metric,
+    .note-box,
+    .quote-box,
+    .formula,
+    .algorithm,
+    .figure-box,
+    .table-wrap,
+    .qa-item {
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: rgba(255, 250, 241, .82);
+    }
+
+    .meta-item {
+      min-height: 74px;
+      padding: 12px 14px;
+    }
+
+    .label {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font: 800 11px / 1.2 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: .12em;
+    }
+
+    .value {
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .hero-visual {
+      align-self: center;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: var(--paper-2);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      transform: rotate(.7deg);
+    }
+
+    .hero-visual .caption {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 14px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 5px 9px;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      color: var(--cyan);
+      font: 800 11px / 1 var(--mono);
+      white-space: nowrap;
+    }
+
+    section {
+      scroll-margin-top: 30px;
+      margin: clamp(34px, 7vw, 76px) 0;
+    }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 18px;
+      align-items: end;
+      margin-bottom: 24px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line-strong);
+    }
+
+    .section-num {
+      display: grid;
+      place-items: center;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: var(--ink);
+      color: #fff7e8;
+      font: 800 14px / 1 var(--mono);
+    }
+
+    h2 {
+      font-size: clamp(31px, 4.6vw, 58px);
+    }
+
+    h3 {
+      margin-top: 28px;
+      margin-bottom: 12px;
+      font-size: clamp(23px, 3vw, 34px);
+    }
+
+    p {
+      margin: 0 0 16px;
+      max-width: 870px;
+      font-size: 16px;
+      line-height: 1.88;
+    }
+
+    .section-intro {
+      max-width: 920px;
+      color: #3d352c;
+      font-size: 18px;
+      line-height: 1.85;
+    }
+
+    .tldr {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(250px, .9fr);
+      gap: 18px;
+    }
+
+    .quote-box {
+      padding: clamp(20px, 4vw, 34px);
+      background: #171512;
+      color: #fff7e8;
+      box-shadow: var(--shadow);
+    }
+
+    .quote-box p {
+      max-width: none;
+      margin: 0;
+      font: 600 clamp(21px, 3vw, 33px) / 1.5 var(--serif);
+    }
+
+    .mini-grid,
+    .metric-grid,
+    .method-grid,
+    .figure-grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    .mini-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .metric-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .method-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .figure-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .metric {
+      position: relative;
+      min-height: 138px;
+      padding: 17px 16px 16px;
+      overflow: hidden;
+    }
+
+    .metric::after {
+      content: "";
+      position: absolute;
+      inset: auto 0 0;
+      height: 5px;
+      background: var(--accent, var(--cyan));
+    }
+
+    .metric .num {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--accent, var(--cyan));
+      font: 900 clamp(30px, 5vw, 46px) / 1 var(--serif);
+      letter-spacing: 0;
+    }
+
+    .metric p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .note-box {
+      padding: 18px;
+    }
+
+    .note-box p,
+    .note-box li {
+      font-size: 15px;
+    }
+
+    .note-box ul,
+    .note-box ol {
+      margin: 10px 0 0;
+      padding-left: 20px;
+    }
+
+    li {
+      margin: 8px 0;
+    }
+
+    .formula,
+    .algorithm {
+      padding: 18px;
+      overflow-x: auto;
+      background:
+        linear-gradient(90deg, rgba(15, 118, 110, .08), transparent 45%),
+        var(--paper-2);
+    }
+
+    .formula pre,
+    .algorithm pre {
+      margin: 0;
+      color: #221c16;
+      font: 600 13px / 1.8 var(--mono);
+      white-space: pre-wrap;
+    }
+
+    .formula-title,
+    .algo-title {
+      margin: 0 0 10px;
+      color: var(--cyan);
+      font: 900 12px / 1.2 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: .14em;
+    }
+
+    .compare {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1px;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--line-strong);
+    }
+
+    .compare > div {
+      min-height: 180px;
+      padding: 18px;
+      background: rgba(255, 250, 241, .93);
+    }
+
+    .compare h3 {
+      margin-top: 0;
+      font-size: 24px;
+    }
+
+    .figure-box {
+      overflow: hidden;
+      background: var(--paper-2);
+    }
+
+    .figure-box img {
+      width: 100%;
+      background: #fff;
+    }
+
+    .figure-box figcaption {
+      margin: 0;
+      padding: 13px 15px 15px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .wide {
+      grid-column: 1 / -1;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      background: var(--paper-2);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 760px;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    th,
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #171512;
+      color: #fff7e8;
+      font: 800 12px / 1.2 var(--mono);
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .good {
+      color: var(--green);
+      font-weight: 800;
+    }
+
+    .bad {
+      color: var(--red);
+      font-weight: 800;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .qa-list {
+      display: grid;
+      gap: 14px;
+    }
+
+    .qa-item {
+      padding: 20px;
+    }
+
+    .qa-item h3 {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 12px;
+      align-items: start;
+      margin-top: 0;
+      font-family: var(--sans);
+      font-size: 20px;
+      line-height: 1.35;
+    }
+
+    .qa-item h3 span {
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: var(--cyan);
+      color: white;
+      font: 900 12px / 1 var(--mono);
+    }
+
+    .ending {
+      padding: clamp(24px, 5vw, 44px);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      color: #fff7e8;
+      background:
+        linear-gradient(135deg, rgba(75, 46, 131, .86), rgba(23, 21, 18, .94) 48%, rgba(198, 95, 26, .82)),
+        #171512;
+      box-shadow: var(--shadow);
+    }
+
+    .ending p {
+      color: rgba(255, 247, 232, .86);
+    }
+
+    .source-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .source-list a {
+      display: block;
+      padding: 12px 14px;
+      border: 1px solid rgba(255, 247, 232, .32);
+      border-radius: 6px;
+      color: #fff7e8;
+      text-decoration: none;
+    }
+
+    .source-list a:hover {
+      background: rgba(255, 247, 232, .12);
+    }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(18px);
+      transition: opacity .55s ease, transform .55s ease;
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @media (max-width: 1080px) {
+      .shell {
+        display: block;
+      }
+
+      .rail {
+        position: relative;
+        top: auto;
+        min-height: 0;
+        margin-bottom: 20px;
+      }
+
+      .toc {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .hero,
+      .tldr,
+      .method-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero {
+        min-height: 0;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .shell {
+        padding-inline: 14px;
+      }
+
+      .toc {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .meta-strip,
+      .mini-grid,
+      .metric-grid,
+      .figure-grid,
+      .compare {
+        grid-template-columns: 1fr;
+      }
+
+      h1 {
+        font-size: clamp(38px, 15vw, 66px);
+      }
+
+      .hero-visual {
+        transform: none;
+      }
+
+      .section-head {
+        grid-template-columns: 1fr;
+      }
+
+      .section-num {
+        width: 44px;
+        height: 44px;
+      }
+
+      p,
+      .section-intro {
+        font-size: 15px;
+      }
+
+      .quote-box p {
+        font-size: 22px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="progress" id="progress"></div>
+  <div class="shell">
+    <aside class="rail" aria-label="章节导航">
+      <div class="rail-head">
+        <p class="rail-kicker">Paper Notes</p>
+        <p class="rail-title">TCOD</p>
+        <p class="rail-sub">多轮 Agent 的 on-policy distillation 为什么会失稳，以及时间课程如何把轨迹从短到长“解锁”。</p>
+      </div>
+      <nav class="toc" id="toc">
+        <a href="#meta"><span class="toc-num">00</span><span>元信息</span></a>
+        <a href="#tldr"><span class="toc-num">01</span><span>TL;DR</span></a>
+        <a href="#problem"><span class="toc-num">02</span><span>问题与动机</span></a>
+        <a href="#mechanism"><span class="toc-num">03</span><span>失稳机制</span></a>
+        <a href="#method"><span class="toc-num">04</span><span>TCOD 方法</span></a>
+        <a href="#experiments"><span class="toc-num">05</span><span>实验分析</span></a>
+        <a href="#qa"><span class="toc-num">06</span><span>深度问答</span></a>
+        <a href="#summary"><span class="toc-num">07</span><span>总结</span></a>
+      </nav>
+      <div class="rail-foot">
+        基于 arXiv:2604.24005v1，论文日期为 2026-04-27。页面中的图片来自 arXiv HTML 版本并已保存到本地 assets 目录。
+      </div>
+    </aside>
+
+    <main>
+      <header class="hero reveal" id="meta">
+        <div>
+          <div class="eyebrow">arXiv 2604.24005v1</div>
+          <h1><span class="mark">TCOD</span>: 时间课程如何驯服多轮 Agent 蒸馏</h1>
+          <p class="lead">这篇论文把多轮 Agent 的 on-policy distillation 失败模式拆开来看：问题不只是学生弱，而是学生自己的早期错误会进入后续历史，逐轮把状态推离教师的有效支持区，导致 KL 信号越来越不可靠。</p>
+
+          <div class="meta-strip" aria-label="论文元信息">
+            <div class="meta-item">
+              <span class="label">论文</span>
+              <span class="value">TCOD: Exploring Temporal Curriculum in On-Policy Distillation for Multi-turn Autonomous Agents</span>
+            </div>
+            <div class="meta-item">
+              <span class="label">作者</span>
+              <span class="value">Jiaqi Wang, Wenhao Zhang, Weijie Shi, Yaliang Li, James Cheng - Tongyi Lab, Alibaba Group</span>
+            </div>
+            <div class="meta-item">
+              <span class="label">发表信息</span>
+              <span class="value">arXiv:2604.24005v1, 2026-04-27, cs.LG</span>
+            </div>
+            <div class="meta-item">
+              <span class="label">阅读门槛</span>
+              <span class="value">难度：★★★★☆。前置知识：KL 散度、on-policy distillation、ReAct 式 Agent、多轮交互评测。</span>
+            </div>
+          </div>
+        </div>
+
+        <figure class="hero-visual">
+          <img src="assets/x2.png" alt="TCOD 论文 Figure 1，展示多轮 OPD 中 KL 随 turn 增大，以及 TCOD 的短到长课程">
+          <figcaption class="caption">
+            <span>Figure 1 展示核心直觉：OPD 一开始吃完整轨迹，错误会在后续 turn 中累积；TCOD 先限制轨迹深度，再逐步扩展。</span>
+            <span class="tag">Trajectory-first</span>
+          </figcaption>
+        </figure>
+      </header>
+
+      <section id="tldr" class="reveal">
+        <div class="section-head">
+          <span class="section-num">01</span>
+          <div>
+            <h2>TL;DR</h2>
+          </div>
+        </div>
+        <div class="tldr">
+          <div class="quote-box">
+            <p>多轮 Agent 上直接做 OPD 会因跨回合错误累积而出现 trajectory-level KL instability。TCOD 用时间课程控制学生接触的轨迹深度，提出 F2B 和 B2F 两种变体，在 ALFWorld、WebShop、ScienceWorld 上稳定 KL，并让小模型从近零成功率恢复。</p>
+          </div>
+          <div class="mini-grid">
+            <div class="metric" style="--accent: var(--red)">
+              <span class="num">~1000</span>
+              <p>vanilla OPD 初始 KL 可达到约 1000，收敛后约 60，早期训练非常不稳定。</p>
+            </div>
+            <div class="metric" style="--accent: var(--cyan)">
+              <span class="num">18.67</span>
+              <p>Qwen3-1.7B 上，TCOD-F2B η=6 的平均成功率比 vanilla OPD 高 18.67 点。</p>
+            </div>
+            <div class="metric" style="--accent: var(--amber)">
+              <span class="num">32%</span>
+              <p>相比 vanilla OPD，TCOD 在训练总时间上最高减少约 32%。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="problem" class="reveal">
+        <div class="section-head">
+          <span class="section-num">02</span>
+          <div>
+            <h2>论文概述</h2>
+          </div>
+        </div>
+
+        <div class="compare">
+          <div>
+            <h3>问题</h3>
+            <p>传统 OPD 在数学、QA 这类单轮任务里常能稳定降低 KL，但多轮 Agent 每一步都会把动作和环境反馈写入历史，早期动作错误会改变后续状态分布。</p>
+          </div>
+          <div>
+            <h3>方案</h3>
+            <p>不要一开始就让学生承担完整长轨迹。TCOD 把可学习的交互深度设为课程变量 <code>k</code>，从短 horizon 开始，随训练步骤逐步扩展。</p>
+          </div>
+          <div>
+            <h3>贡献</h3>
+            <p>论文识别 trajectory-level KL instability，给出 F2B/B2F 两个轻量实现，并在三个多轮 benchmark 上验证 KL 稳定性、成功率和训练效率。</p>
+          </div>
+        </div>
+
+        <h3>背景：OPD 的“好信号”为什么到了多轮会变脆</h3>
+        <p>OPD 的吸引力在于，它用教师分布给学生自己的 rollout 提供稠密监督，比只靠稀疏奖励更容易训练。单轮任务里，学生输出一次答案，教师对这个答案附近的 token 分布给出 KL 信号。多轮 Agent 则不同：学生第 0 轮的动作会改变第 1 轮观察，第 1 轮动作又改变第 2 轮观察，历史 <code>h_t</code> 会把错误打包传给后续所有 turn。</p>
+        <p>论文用 ALFWorld 做 pilot study，发现小学生模型在 vanilla OPD 下会同时出现 KL escalation 和 success rate collapse。即使某些更大模型最终能收敛，初始 KL 也高到足以拖慢训练。问题的根源是长 horizon 的因果耦合，而不是某个单独 token 的监督噪声。</p>
+
+        <div class="formula">
+          <div class="formula-title">Multi-turn 状态定义</div>
+          <pre>h_t = (o_0, a_0, o_1, a_1, ..., o_{t-1}, a_{t-1}, o_t)
+
+tau = (h_0, a_0, h_1, a_1, ..., h_{T-1}, a_{T-1})</pre>
+        </div>
+      </section>
+
+      <section id="mechanism" class="reveal">
+        <div class="section-head">
+          <span class="section-num">03</span>
+          <div>
+            <h2>失稳机制</h2>
+          </div>
+        </div>
+
+        <p class="section-intro">论文把失败模式命名为 <strong>Trajectory-Level KL Instability</strong>。直觉上，学生走偏后，教师仍会被要求在这个“学生自己制造的状态”上给出监督。但教师在这些状态上未必有高置信策略，于是 KL 信号变大、变噪，学生又用噪声继续更新，训练就会陷入恶性循环。</p>
+
+        <div class="formula">
+          <div class="formula-title">Vanilla OPD 目标</div>
+          <pre>L_OPD(theta) =
+  E_{tau ~ pi_theta} [
+    sum_{t=0}^{T-1} D_KL(
+      pi_phi(a_t | h_t) || pi_theta(a_t | h_t)
+    )
+  ]
+
+D_KL(pi_phi || pi_theta) =
+  sum_a pi_phi(a | h_t) log( pi_phi(a | h_t) / pi_theta(a | h_t) )</pre>
+        </div>
+
+        <div class="figure-grid">
+          <figure class="figure-box">
+            <img src="assets/x3.png" alt="Figure 2a，trajectory-level KL 在训练中上升">
+            <figcaption><strong>Figure 2(a)</strong>：小模型在 vanilla OPD 中 trajectory-level KL 逐步升高，和单轮任务中 KL 下降的经验相反。</figcaption>
+          </figure>
+          <figure class="figure-box">
+            <img src="assets/x4.png" alt="Figure 2b，成功率随 KL spike 崩塌">
+            <figcaption><strong>Figure 2(b)</strong>：KL spike 与成功率崩塌同时出现，说明监督信号不再稳定地推动能力增长。</figcaption>
+          </figure>
+          <figure class="figure-box">
+            <img src="assets/x5.png" alt="Figure 2c，初始 KL 和最终 KL 的差距">
+            <figcaption><strong>Figure 2(c)</strong>：不同 teacher-student 组合中，初始 KL 约为 1000，最终约为 60，早期不稳定非常突出。</figcaption>
+          </figure>
+          <figure class="figure-box">
+            <img src="assets/x6.png" alt="Figure 2d，每回合 KL 随 turn index 上升">
+            <figcaption><strong>Figure 2(d)</strong>：KL 随 turn index 增大，支撑了“错误跨回合放大”的解释。</figcaption>
+          </figure>
+        </div>
+
+        <h3>这个机制和 Long-CoT 变长不是一回事</h3>
+        <p>论文专门区分了两类长度问题。Long-CoT 是同一个环境状态上的响应变长；多轮 Agent 是每轮都会改变环境状态，动作和观察进入新的历史。后者带来的不是单次文本更长，而是状态分布被学生动作连续改写，错误会顺着轨迹传播。</p>
+      </section>
+
+      <section id="method" class="reveal">
+        <div class="section-head">
+          <span class="section-num">04</span>
+          <div>
+            <h2>核心方法</h2>
+          </div>
+        </div>
+
+        <p class="section-intro">TCOD 的设计很克制：不换 Agent 架构，不引入复杂奖励建模，只在 rollout 的时间深度上加课程。它把“完整任务”拆成一个逐步变长的 horizon，先让学生在短轨迹里拿到可靠 KL，再扩展到长轨迹。</p>
+
+        <figure class="figure-box wide">
+          <img src="assets/x7.png" alt="Figure 3，TCOD-F2B 和 TCOD-B2F 方法总览">
+          <figcaption><strong>Figure 3</strong>：左侧是 vanilla OPD，学生全程 rollout；中间 F2B 从前往后扩展学生 horizon；右侧 B2F 让教师先走前缀，学生从接近终点的位置开始接管，再逐步向初始状态扩展。</figcaption>
+        </figure>
+
+        <h3>统一课程变量：k</h3>
+        <p>论文使用线性 pacing，把学生当前可承担的交互深度写成训练步数的函数。<code>eta</code> 越大，课程推进越慢，学生会在当前 horizon 上停留更久。</p>
+        <div class="formula">
+          <div class="formula-title">Linear pacing</div>
+          <pre>k = k_start + floor(n / eta),  n in {1, ..., N}
+
+F2B: k <- min(k_start + floor(n / eta), T_max)
+B2F: k <- min(k_start + floor(n / eta), L)</pre>
+        </div>
+
+        <div class="method-grid">
+          <div class="note-box">
+            <h3>TCOD-F2B：Forward-to-Backward</h3>
+            <p>F2B 是“从任务开头向后扩展”。训练初期，学生只 rollout 前 <code>k</code> 步，损失也只计算这些早期 turn 的 KL。随着 <code>k</code> 增大，学生逐渐接触更长轨迹，直到完整任务。</p>
+            <div class="formula">
+              <div class="formula-title">F2B objective</div>
+              <pre>L_TCOD_F2B(theta) =
+  E_{tau ~ pi_theta} [
+    sum_{t=0}^{k-1} D_KL(
+      pi_phi(a_t | h_t) || pi_theta(a_t | h_t)
+    )
+  ]</pre>
+            </div>
+          </div>
+
+          <div class="note-box">
+            <h3>TCOD-B2F：Backward-to-Forward</h3>
+            <p>B2F 是“从接近终点向前扩展”。先用教师执行成功轨迹 <code>tau*</code> 的前缀，把环境带到中间状态，再让学生接管后 <code>k</code> 步。早期学生面对的是较短的收尾问题，随后逐渐从更早状态开始。</p>
+            <div class="formula">
+              <div class="formula-title">B2F objective</div>
+              <pre>L_TCOD_B2F(theta) =
+  E_{tau ~ (pi_phi, pi_theta)} [
+    sum_{t=L-k+1}^{T-1} D_KL(
+      pi_phi(a_t | h_t) || pi_theta(a_t | h_t)
+    )
+  ]</pre>
+            </div>
+          </div>
+        </div>
+
+        <h3>算法视角</h3>
+        <div class="method-grid">
+          <div class="algorithm">
+            <div class="algo-title">TCOD-F2B 伪代码</div>
+            <pre>for n = 1 ... N:
+  k = min(k_start + floor(n / eta), T_max)
+  initialize environment and empty history
+  for t = 0 ... k - 1:
+    sample action from student pi_theta(. | h_t)
+    execute action and update history
+  loss = sum_{t=0}^{k} KL(pi_phi(. | h_t) || pi_theta(. | h_t))
+  update theta with gradient of loss</pre>
+          </div>
+          <div class="algorithm">
+            <div class="algo-title">TCOD-B2F 伪代码</div>
+            <pre>pre-collect successful teacher trajectories T*
+for n = 1 ... N:
+  sample tau* with length L
+  k = min(k_start + floor(n / eta), L)
+  for t = 0 ... L - k - 1:
+    execute teacher action with stop-gradient
+  for t = L - k ... L:
+    sample and execute student action
+  loss = sum_{t=L-k}^{L} KL(pi_phi(. | h_t) || pi_theta(. | h_t))
+  update theta</pre>
+          </div>
+        </div>
+
+        <h3>为什么这两个方向都合理</h3>
+        <p>F2B 更像渐进式在线练习：学生从真实初始状态开始，但一开始只被要求走很短的路。它不需要 teacher demonstrations，改动最小，训练效率也更高。B2F 更像 reverse curriculum：教师先把学生送到接近成功的位置，避免早期错误立刻污染全轨迹；代价是需要预先收集成功教师轨迹，并且 rollout 时教师前缀也要参与环境交互。</p>
+
+        <h3>工程细节：异步采样和 staleness 控制</h3>
+        <p>所有实验运行在 8 张 NVIDIA H20 96GB GPU 上。作者把 rollout actor 和 learner 解耦：4 张 GPU 用于 actors，2 张用于 learners，2 张用于 teachers。轨迹进入 lock-free ring buffer，learner 从共享 buffer 取样更新。</p>
+        <p>为了提高多轮样本效率，一条完整轨迹会拆成多个 prefix sub-trajectory。每条经验记录采集时的 policy version；若 <code>n_current - n_old > Delta_max</code>，就丢弃这条经验。论文经验上设置 <code>Delta_max = 2</code>，在 sample efficiency 和 on-policy 约束之间取得平衡。</p>
+      </section>
+
+      <section id="experiments" class="reveal">
+        <div class="section-head">
+          <span class="section-num">05</span>
+          <div>
+            <h2>实验分析</h2>
+          </div>
+        </div>
+
+        <p class="section-intro">实验覆盖 ALFWorld、WebShop、ScienceWorld。核心不是单纯刷新榜单，而是回答三个问题：TCOD 能否缓解 KL escalation；学生能否超越教师失败边界；课程增长率和训练成本是否可控。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Benchmark</th>
+                <th>类型</th>
+                <th>难度</th>
+                <th>OOD</th>
+                <th>最大回合</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>ALFWorld-seen</td><td>Embodied</td><td>Easy</td><td>否</td><td>30</td></tr>
+              <tr><td>ALFWorld-unseen</td><td>Embodied</td><td>Medium</td><td>是</td><td>30</td></tr>
+              <tr><td>ALFWorld-hard</td><td>Embodied</td><td>Hard</td><td>是</td><td>30</td></tr>
+              <tr><td>WebShop</td><td>E-commerce</td><td>Medium</td><td>否</td><td>15</td></tr>
+              <tr><td>ScienceWorld</td><td>Scientific Reason</td><td>Hard</td><td>否</td><td>30</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>主结果 1：ALFWorld 上成功率和步数同时改善</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>学生模型</th>
+                <th>方法</th>
+                <th>Valid Seen SR</th>
+                <th>Valid Unseen SR</th>
+                <th>Hard SR</th>
+                <th>关键解读</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Qwen2.5-3B</td>
+                <td>Vanilla OPD</td>
+                <td>65.72</td>
+                <td>60.45</td>
+                <td>10.74</td>
+                <td class="muted">强于 SFT，但仍受长轨迹不稳定影响。</td>
+              </tr>
+              <tr>
+                <td>Qwen2.5-3B</td>
+                <td>TCOD-F2B</td>
+                <td class="good">81.43 (+15.71)</td>
+                <td class="good">79.19 (+18.74)</td>
+                <td class="bad">9.92 (-0.82)</td>
+                <td class="muted">seen/unseen 提升最大，hard split 上不如 B2F。</td>
+              </tr>
+              <tr>
+                <td>Qwen2.5-7B</td>
+                <td>Vanilla OPD</td>
+                <td>75.37</td>
+                <td>72.14</td>
+                <td>13.22</td>
+                <td class="muted">更大模型可承受部分 KL 噪声，但效率仍低。</td>
+              </tr>
+              <tr>
+                <td>Qwen2.5-7B</td>
+                <td>TCOD-B2F</td>
+                <td class="good">86.43 (+11.06)</td>
+                <td class="good">77.61 (+5.47)</td>
+                <td class="good">20.66 (+7.44)</td>
+                <td class="muted">hard split 表现最好，并超过 teacher 的 6.61。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="figure-grid">
+          <figure class="figure-box">
+            <img src="assets/x8.png" alt="Figure 4a，Qwen2.5-7B 学生在 ALFWorld 的成功率训练动态">
+            <figcaption><strong>Figure 4(a)</strong>：Qwen2.5-7B 学生的成功率动态，TCOD 比 vanilla OPD 更快、更稳。</figcaption>
+          </figure>
+          <figure class="figure-box">
+            <img src="assets/x9.png" alt="Figure 4b，Qwen2.5-7B 学生的 KL 训练动态">
+            <figcaption><strong>Figure 4(b)</strong>：TCOD 维持更稳定 KL，避免 vanilla OPD 的大幅波动。</figcaption>
+          </figure>
+          <figure class="figure-box">
+            <img src="assets/x10.png" alt="Figure 4c，Qwen2.5-1.5B 学生成功率动态">
+            <figcaption><strong>Figure 4(c)</strong>：小学生模型在 TCOD-F2B 下可以从崩塌中恢复，成功率逐步上升。</figcaption>
+          </figure>
+          <figure class="figure-box">
+            <img src="assets/x11.png" alt="Figure 4d，Qwen2.5-1.5B 学生 KL 动态">
+            <figcaption><strong>Figure 4(d)</strong>：较大的 <code>eta</code> 会让课程推进更慢，KL 更稳。</figcaption>
+          </figure>
+        </div>
+
+        <h3>主结果 2：Qwen3 小模型从近零成功率恢复</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>学生模型</th>
+                <th>方法</th>
+                <th>WebShop</th>
+                <th>ALFWorld</th>
+                <th>ScienceWorld</th>
+                <th>Avg</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Qwen3-1.7B</td><td>Vanilla OPD</td><td>0.14</td><td>0.32</td><td>0.05</td><td>0.17</td></tr>
+              <tr><td>Qwen3-1.7B</td><td>TCOD-B2F η=4</td><td class="good">21.12</td><td class="good">23.87</td><td class="good">11.34</td><td class="good">18.78 (+18.61)</td></tr>
+              <tr><td>Qwen3-1.7B</td><td>TCOD-F2B η=6</td><td class="good">21.78</td><td class="good">23.65</td><td class="good">11.08</td><td class="good">18.84 (+18.67)</td></tr>
+              <tr><td>Qwen3-4B</td><td>Vanilla OPD</td><td>30.12</td><td>36.85</td><td>15.95</td><td>27.64</td></tr>
+              <tr><td>Qwen3-4B</td><td>TCOD-F2B η=2</td><td class="good">31.81</td><td class="good">38.95</td><td class="good">17.85</td><td class="good">29.54 (+1.90)</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>主结果 3：学生并非只能复制教师</h3>
+        <p>ALFWorld hard split 由 121 个教师在 pass@10 下失败的任务组成。Qwen2.5-7B-RL 教师在 hard split 的成功率只有 6.61。TCOD-B2F 训练出的 Qwen2.5-7B 学生达到 20.66，超过教师 14.05 点；Qwen2.5-3B 学生用 B2F 也达到 13.22。</p>
+        <p>这个现象的合理解释是：蒸馏并不等于逐轨迹复制。OPD 让学生在自己的状态分布上学习教师分布；TCOD 又控制了学生进入困难状态的节奏。学生可能学到比某次教师采样更稳的策略，尤其是在 teacher pass@10 失败但 teacher 分布仍包含局部有用偏好的区域。</p>
+
+        <div class="figure-grid">
+          <figure class="figure-box">
+            <img src="assets/x12.png" alt="Figure 5a，平均 action rounds 训练动态">
+            <figcaption><strong>Figure 5(a)</strong>：TCOD 减少 action rounds，F2B 通常更省 rollout 步数。</figcaption>
+          </figure>
+          <figure class="figure-box">
+            <img src="assets/x13.png" alt="Figure 5b，advantages 训练动态">
+            <figcaption><strong>Figure 5(b)</strong>：advantage 更快收敛，说明课程让有效学习信号更早出现。</figcaption>
+          </figure>
+          <figure class="figure-box">
+            <img src="assets/x14.png" alt="Figure 5c，最大响应长度训练动态">
+            <figcaption><strong>Figure 5(c)</strong>：TCOD 可缓解小模型输出长度膨胀，减少失控响应。</figcaption>
+          </figure>
+          <figure class="figure-box">
+            <img src="assets/x16.png" alt="Figure 6，训练时间对比">
+            <figcaption><strong>Figure 6</strong>：TCOD 在 ALFWorld 和 ScienceWorld 上减少总训练时间，最高约 32%。</figcaption>
+          </figure>
+        </div>
+
+        <h3>实验里的边界条件</h3>
+        <div class="metric-grid">
+          <div class="metric" style="--accent: var(--violet)">
+            <span class="num">η</span>
+            <p>η={2,4,6} 的成功率变化小于 2%，部署时不需要极端调参。</p>
+          </div>
+          <div class="metric" style="--accent: var(--blue)">
+            <span class="num">Teacher</span>
+            <p>领域适配教师比单纯更大的通用教师更关键。Qwen2.5-7B-RL 在 ALFWorld 上比 Qwen3-30B 更有用。</p>
+          </div>
+          <div class="metric" style="--accent: var(--cyan)">
+            <span class="num">B2F</span>
+            <p>B2F 依赖预先收集的成功教师轨迹，适合教师能稳定给出演示的环境。</p>
+          </div>
+          <div class="metric" style="--accent: var(--amber)">
+            <span class="num">F2B</span>
+            <p>F2B 不需要 demonstrations，是更直接的 drop-in 方案，训练时间也通常更低。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="qa" class="reveal">
+        <div class="section-head">
+          <span class="section-num">06</span>
+          <div>
+            <h2>深度理解问答</h2>
+          </div>
+        </div>
+
+        <div class="qa-list">
+          <div class="qa-item">
+            <h3><span>Q1</span>为什么单轮 OPD 的稳定经验不能直接迁移到多轮 Agent？</h3>
+            <p>单轮任务里，学生输出一次，教师在这个输出附近给监督。多轮 Agent 的状态是历史 <code>h_t</code>，它包含过去所有观察和动作。学生在第 1 轮的小错误会改变第 2 轮观察，第 2 轮错误继续改变第 3 轮，教师被迫在越来越偏离专家轨迹的历史上打分。KL 变大并不只代表“学生不像教师”，还可能代表“这个状态对教师也不可靠”。</p>
+          </div>
+
+          <div class="qa-item">
+            <h3><span>Q2</span>“教师有效支持区”是什么意思？</h3>
+            <p>可以把教师看成在熟悉状态上有清晰动作偏好的分布。当学生 rollout 生成的状态仍接近教师会访问的状态时，教师分布能提供有价值的 KL 监督；当学生错误连续累积，进入教师很少访问或任务已被破坏的状态时，教师给某些 token 的概率会下降，KL 信号变大且更难解释。论文没有形式化定义这个支持区，但 per-turn KL 上升和成功率崩塌说明这种偏移正在发生。</p>
+          </div>
+
+          <div class="qa-item">
+            <h3><span>Q3</span>F2B 和 B2F 应该怎么选？</h3>
+            <p>如果没有稳定的教师成功轨迹，或者想最小化工程改动，F2B 更合适：限制学生最大交互步数即可。如果教师能通过 pass@k 收集到成功轨迹，B2F 可以把学生放在更接近成功的中间状态，尤其适合早期步骤很容易犯错、导致后续全崩的任务。论文结果里，F2B 在 seen/unseen 提升和效率上很强，B2F 在 hard split 上更能跨过教师失败边界。</p>
+          </div>
+
+          <div class="qa-item">
+            <h3><span>Q4</span>为什么 TCOD-B2F 有机会超过教师？</h3>
+            <p>hard split 中“教师失败”是按 pass@10 采样定义的，不等于教师分布没有任何有用信息。B2F 用教师成功轨迹作为课程起点，学生在逐步扩展的接管区间内学习教师局部分布，同时通过自己的 rollout 探索新的状态。最终策略可能组合出比有限次教师采样更稳的动作序列。这里的超越不是凭空产生知识，而是课程让学生更有效地利用了教师分布中的局部偏好。</p>
+          </div>
+
+          <div class="qa-item">
+            <h3><span>Q5</span>为什么更强教师不一定更好？</h3>
+            <p>附录观察显示，3B 学生配 30B 强教师和配 7B RL 教师的提升相近，而 7B 学生配 7B RL 教师收敛更快。原因可能有两层：第一，领域适配比参数规模更重要，ALFWorld 上的 RL 教师更贴近目标环境；第二，师生能力差距太大时，教师分布中的细粒度偏好未必落在学生可学习区域，KL 可能变成过强约束。</p>
+          </div>
+
+          <div class="qa-item">
+            <h3><span>Q6</span>TCOD 和强化学习课程有什么区别？</h3>
+            <p>TCOD 的训练信号仍然是教师-学生 KL，不是环境奖励。课程控制的是 rollout horizon 和监督区间，而不是按奖励难度筛任务。相比很多 RL curriculum，它不需要额外模型估计难度，也不改变底层 distillation 目标。它更像给 OPD 加一个时间维度的安全阀。</p>
+          </div>
+
+          <div class="qa-item">
+            <h3><span>Q7</span>这篇论文的主要局限是什么？</h3>
+            <p>B2F 需要预先收集成功教师轨迹，会带来额外成本；固定线性课程虽然在三类 benchmark 上鲁棒，但不同环境或师生组合可能需要自适应 pacing；实验集中在文本多轮环境，尚未证明能直接迁移到多模态或真实物理 embodied 场景。论文提到可以用 KL 的指数滑动平均来动态调节 horizon，这是自然的后续方向。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="summary" class="reveal">
+        <div class="section-head">
+          <span class="section-num">07</span>
+          <div>
+            <h2>总结与思考</h2>
+          </div>
+        </div>
+
+        <div class="ending">
+          <h3>读完后应留下的三件事</h3>
+          <p>第一，multi-turn OPD 的核心风险是轨迹层面的分布偏移，不是简单的 token-level mismatch。第二，控制学生接触轨迹深度是一种低成本但有效的稳定化手段。第三，教师的领域适配和师生能力匹配，比“教师越大越好”更接近这类蒸馏任务的真实瓶颈。</p>
+
+          <h3>适用场景</h3>
+          <p>TCOD 适合长 horizon、稀疏奖励、教师可提供分布监督的 Agent 训练，尤其是 ALFWorld/WebShop 这类文本交互任务。F2B 适合快速接入；B2F 适合教师能采集成功轨迹、且任务后半段学习信号更稳定的场景。</p>
+
+          <h3>来源</h3>
+          <div class="source-list">
+            <a href="https://arxiv.org/pdf/2604.24005" target="_blank" rel="noreferrer">原论文 PDF：arXiv:2604.24005</a>
+            <a href="https://arxiv.org/html/2604.24005v1" target="_blank" rel="noreferrer">arXiv HTML 版本：公式、图表和表格解析来源</a>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const progress = document.getElementById('progress');
+    const sections = Array.from(document.querySelectorAll('main section, header.hero'));
+    const links = Array.from(document.querySelectorAll('.toc a'));
+    const revealItems = Array.from(document.querySelectorAll('.reveal'));
+
+    function updateProgress() {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      const ratio = max > 0 ? window.scrollY / max : 0;
+      progress.style.transform = `scaleX(${Math.min(1, Math.max(0, ratio))})`;
+    }
+
+    const navObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const id = entry.target.id;
+        links.forEach((link) => {
+          link.classList.toggle('active', link.getAttribute('href') === `#${id}`);
+        });
+      });
+    }, { rootMargin: '-35% 0px -55% 0px', threshold: 0.01 });
+
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) entry.target.classList.add('visible');
+      });
+    }, { threshold: 0.08 });
+
+    sections.forEach((section) => navObserver.observe(section));
+    revealItems.forEach((item) => revealObserver.observe(item));
+    updateProgress();
+    window.addEventListener('scroll', updateProgress, { passive: true });
+  </script>
+</body>
+</html>
