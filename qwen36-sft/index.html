@@ -1,0 +1,1426 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Qwen3.6-35B-A3B SFT 训练手册</title>
+  <style>
+    :root {
+      --ink: #151412;
+      --ink-soft: #3b3833;
+      --muted: #706c62;
+      --paper: #f5f6f0;
+      --panel: #fffef8;
+      --panel-2: #ecefe8;
+      --line: #d4d6cb;
+      --line-dark: #292720;
+      --red: #df3f2d;
+      --cyan: #008f98;
+      --green: #347b42;
+      --yellow: #e4aa25;
+      --blue: #2d62a8;
+      --code: #181713;
+      --code-line: #353229;
+      --shadow: 0 18px 50px rgba(28, 25, 18, 0.12);
+      --radius: 6px;
+      color-scheme: light;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(90deg, rgba(21,20,18,0.045) 1px, transparent 1px) 0 0 / 48px 48px,
+        linear-gradient(0deg, rgba(21,20,18,0.035) 1px, transparent 1px) 0 0 / 48px 48px,
+        var(--paper);
+      font-family: "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", "Hiragino Mincho ProN", serif;
+      line-height: 1.78;
+      letter-spacing: 0;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.32;
+      background-image:
+        radial-gradient(rgba(21, 20, 18, 0.16) 0.55px, transparent 0.7px);
+      background-size: 7px 7px;
+      mix-blend-mode: multiply;
+      z-index: 0;
+    }
+
+    a {
+      color: var(--blue);
+      text-decoration-color: rgba(45, 98, 168, 0.35);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    code,
+    pre,
+    .metric-value,
+    .eyebrow,
+    .toc-link,
+    .copy-code,
+    .rail-title,
+    .top-meta,
+    .node,
+    .chip {
+      font-family: "JetBrains Mono", "SFMono-Regular", "Cascadia Code", "Menlo", monospace;
+    }
+
+    .progress {
+      position: fixed;
+      inset: 0 0 auto;
+      height: 4px;
+      background: linear-gradient(90deg, var(--red), var(--cyan), var(--green));
+      transform: scaleX(0);
+      transform-origin: left;
+      z-index: 20;
+    }
+
+    .page {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: minmax(230px, 0.8fr) minmax(0, 820px) minmax(260px, 0.9fr);
+      gap: 28px;
+      width: min(1600px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 28px 0 80px;
+    }
+
+    .left-rail,
+    .right-rail {
+      position: sticky;
+      top: 22px;
+      align-self: start;
+      max-height: calc(100vh - 44px);
+      overflow: auto;
+      scrollbar-width: thin;
+    }
+
+    .brand-plate {
+      border: 1px solid var(--line-dark);
+      background: var(--ink);
+      color: var(--panel);
+      padding: 18px;
+      box-shadow: 7px 7px 0 var(--yellow);
+    }
+
+    .brand-plate strong {
+      display: block;
+      font-size: 18px;
+      line-height: 1.15;
+      letter-spacing: 0;
+      margin-top: 8px;
+    }
+
+    .eyebrow {
+      color: var(--yellow);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .toc {
+      margin-top: 22px;
+      padding: 10px 0;
+      border-top: 1px solid var(--line-dark);
+      border-bottom: 1px solid var(--line-dark);
+    }
+
+    .toc-link {
+      display: block;
+      color: var(--ink-soft);
+      text-decoration: none;
+      font-size: 12px;
+      line-height: 1.45;
+      padding: 8px 10px;
+      border-left: 3px solid transparent;
+      transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+    }
+
+    .toc-l3 {
+      padding-left: 24px;
+      color: var(--muted);
+    }
+
+    .toc-link:hover,
+    .toc-link.active {
+      color: var(--ink);
+      background: rgba(0, 143, 152, 0.08);
+      border-left-color: var(--cyan);
+    }
+
+    .article-shell {
+      min-width: 0;
+    }
+
+    .manual-top {
+      border: 1px solid var(--line-dark);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .manual-band {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 18px;
+      padding: 16px 18px;
+      background: var(--ink);
+      color: var(--panel);
+      border-bottom: 4px solid var(--red);
+    }
+
+    .manual-band .top-meta {
+      font-size: 12px;
+      color: #d8d4c7;
+    }
+
+    .manual-title {
+      padding: 34px 36px 28px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(34px, 5.6vw, 70px);
+      line-height: 0.98;
+      font-weight: 900;
+      letter-spacing: 0;
+      max-width: 780px;
+    }
+
+    .subtitle {
+      margin: 18px 0 0;
+      color: var(--ink-soft);
+      font-size: 18px;
+      max-width: 700px;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 24px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 5px 9px;
+      border: 1px solid var(--line-dark);
+      background: var(--panel-2);
+      color: var(--ink);
+      font-size: 12px;
+    }
+
+    .visual-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border-top: 1px solid var(--line-dark);
+      background: #fbfaf3;
+    }
+
+    .metric {
+      min-width: 0;
+      padding: 16px;
+      border-right: 1px solid var(--line-dark);
+    }
+
+    .metric:last-child {
+      border-right: 0;
+    }
+
+    .metric-label {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.25;
+    }
+
+    .metric-value {
+      margin-top: 6px;
+      font-size: clamp(20px, 2vw, 30px);
+      line-height: 1;
+      font-weight: 800;
+      color: var(--ink);
+    }
+
+    .workflow {
+      margin: 28px 0;
+      border: 1px solid var(--line-dark);
+      background: var(--panel);
+      padding: 20px;
+    }
+
+    .workflow-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .flow-step {
+      position: relative;
+      min-height: 92px;
+      padding: 12px 10px;
+      border: 1px solid var(--line);
+      background: #f9f8f1;
+    }
+
+    .flow-step::after {
+      content: "";
+      position: absolute;
+      right: -9px;
+      top: 50%;
+      width: 9px;
+      border-top: 2px solid var(--red);
+    }
+
+    .flow-step:last-child::after {
+      display: none;
+    }
+
+    .flow-step b {
+      display: block;
+      font-size: 13px;
+      line-height: 1.25;
+    }
+
+    .flow-step span {
+      display: block;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .article {
+      margin-top: 28px;
+      padding: 38px clamp(22px, 5vw, 56px);
+      background: var(--panel);
+      border: 1px solid var(--line-dark);
+      box-shadow: var(--shadow);
+    }
+
+    .article h1 {
+      display: none;
+    }
+
+    .article h2 {
+      display: grid;
+      grid-template-columns: 54px 1fr;
+      gap: 14px;
+      align-items: baseline;
+      margin: 58px 0 18px;
+      padding-top: 18px;
+      border-top: 2px solid var(--line-dark);
+      font-size: clamp(24px, 3vw, 36px);
+      line-height: 1.16;
+      letter-spacing: 0;
+    }
+
+    .article h2:first-of-type {
+      margin-top: 0;
+    }
+
+    .section-index {
+      color: var(--red);
+      font-size: 14px;
+      line-height: 1;
+    }
+
+    .article h3 {
+      margin: 34px 0 10px;
+      color: var(--cyan);
+      font-size: 20px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .article p {
+      margin: 14px 0;
+      font-size: 17px;
+    }
+
+    .article p:first-child {
+      font-size: 18px;
+      color: var(--ink-soft);
+    }
+
+    .article ul,
+    .article ol {
+      margin: 14px 0 22px;
+      padding-left: 0;
+      list-style: none;
+    }
+
+    .article li {
+      position: relative;
+      margin: 8px 0;
+      padding-left: 30px;
+      font-size: 16px;
+    }
+
+    .article ul li::before {
+      content: "";
+      position: absolute;
+      left: 4px;
+      top: 0.78em;
+      width: 10px;
+      border-top: 2px solid var(--red);
+    }
+
+    .article ol {
+      counter-reset: item;
+    }
+
+    .article ol li {
+      counter-increment: item;
+    }
+
+    .article ol li::before {
+      content: counter(item, decimal-leading-zero);
+      position: absolute;
+      left: 0;
+      top: 0.15em;
+      color: var(--cyan);
+      font: 700 11px/1 "JetBrains Mono", monospace;
+    }
+
+    .article code {
+      padding: 0.13em 0.34em;
+      background: rgba(0, 143, 152, 0.1);
+      border: 1px solid rgba(0, 143, 152, 0.22);
+      border-radius: 4px;
+      font-size: 0.88em;
+      color: #004b54;
+      overflow-wrap: anywhere;
+    }
+
+    .code-shell {
+      margin: 18px 0 24px;
+      border: 1px solid var(--line-dark);
+      background: var(--code);
+      color: #f2efe2;
+      box-shadow: 5px 5px 0 rgba(0, 143, 152, 0.2);
+      overflow: hidden;
+    }
+
+    .code-shell[data-lang="bash"],
+    .code-shell[data-lang="sh"],
+    .code-shell[data-lang="shell"] {
+      background: #050505;
+      color: #ffffff;
+      box-shadow: 5px 5px 0 rgba(0, 0, 0, 0.2);
+    }
+
+    .code-shell figcaption {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--code-line);
+      color: #c7c1ad;
+      font-size: 12px;
+    }
+
+    .copy-code {
+      border: 1px solid #67614f;
+      background: transparent;
+      color: #f2efe2;
+      font-size: 11px;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+
+    .copy-code:hover {
+      background: var(--yellow);
+      color: var(--ink);
+      border-color: var(--yellow);
+    }
+
+    pre {
+      margin: 0;
+      padding: 16px;
+      overflow: auto;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .article .code-shell pre code {
+      padding: 0;
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      color: inherit;
+      font-size: inherit;
+      overflow-wrap: normal;
+    }
+
+    .article .code-shell[data-lang="bash"] pre code,
+    .article .code-shell[data-lang="sh"] pre code,
+    .article .code-shell[data-lang="shell"] pre code {
+      color: #ffffff;
+    }
+
+    .rail-card {
+      border: 1px solid var(--line-dark);
+      background: var(--panel);
+      padding: 16px;
+      margin-bottom: 18px;
+      box-shadow: 5px 5px 0 rgba(21, 20, 18, 0.1);
+    }
+
+    .rail-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 12px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--ink-soft);
+    }
+
+    .rail-title::after {
+      content: "";
+      flex: 1;
+      border-top: 1px solid var(--line);
+    }
+
+    .param-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .param {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .param:last-child {
+      border-bottom: 0;
+    }
+
+    .param span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .param b {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .topology {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+
+    .node {
+      min-height: 46px;
+      border: 1px solid var(--line-dark);
+      background: #f7f6ed;
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      line-height: 1.1;
+      position: relative;
+    }
+
+    .node::before {
+      content: "";
+      position: absolute;
+      inset: 5px;
+      border: 1px dashed rgba(223, 63, 45, 0.45);
+    }
+
+    .legend {
+      display: grid;
+      gap: 7px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .legend i {
+      display: inline-block;
+      width: 11px;
+      height: 11px;
+      margin-right: 6px;
+      vertical-align: -1px;
+      border: 1px solid var(--line-dark);
+    }
+
+    .risk-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .risk-list li {
+      padding: 9px 10px;
+      border-left: 4px solid var(--red);
+      background: #f8f2ea;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .footer-note {
+      margin-top: 24px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    @media (max-width: 1180px) {
+      .page {
+        grid-template-columns: minmax(210px, 260px) minmax(0, 1fr);
+      }
+
+      .right-rail {
+        position: static;
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+        max-height: none;
+      }
+
+      .rail-card {
+        margin-bottom: 0;
+      }
+    }
+
+    @media (max-width: 860px) {
+      .page {
+        width: min(100% - 24px, 760px);
+        grid-template-columns: 1fr;
+        gap: 18px;
+        padding-top: 14px;
+      }
+
+      .left-rail {
+        position: static;
+        max-height: none;
+      }
+
+      .brand-plate {
+        box-shadow: 4px 4px 0 var(--yellow);
+      }
+
+      .toc {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        max-height: 230px;
+        overflow: auto;
+      }
+
+      .right-rail {
+        grid-template-columns: 1fr;
+      }
+
+      .manual-band,
+      .visual-strip,
+      .workflow-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .metric {
+        border-right: 0;
+        border-bottom: 1px solid var(--line-dark);
+      }
+
+      .metric:last-child {
+        border-bottom: 0;
+      }
+
+      .flow-step::after {
+        display: none;
+      }
+
+      .article {
+        padding: 28px 18px;
+      }
+
+      .article h2 {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+    }
+
+    @media print {
+      body {
+        background: white;
+      }
+
+      body::before,
+      .progress,
+      .left-rail,
+      .right-rail,
+      .copy-code {
+        display: none;
+      }
+
+      .page {
+        display: block;
+        width: 100%;
+      }
+
+      .manual-top,
+      .article,
+      .workflow {
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="progress" id="progress"></div>
+  <main class="page">
+    <aside class="left-rail" aria-label="文章目录">
+      <div class="brand-plate">
+        <span class="eyebrow">Field Manual</span>
+        <strong>Qwen3.6-35B-A3B SFT 训练手册</strong>
+      </div>
+      <nav class="toc">
+        <a class="toc-link toc-l2" href="#1-这次训练到底在做什么"><span>1. 这次训练到底在做什么</span></a>
+<a class="toc-link toc-l2" href="#2-运行脚本的真实流程"><span>2. 运行脚本的真实流程</span></a>
+<a class="toc-link toc-l2" href="#3-input-key-messages-是什么"><span>3. input_key: messages 是什么</span></a>
+<a class="toc-link toc-l2" href="#4-load-path-ref-load-model-path-的区别"><span>4. load_path、ref_load、model_path 的区别</span></a>
+<a class="toc-link toc-l2" href="#5-megatron-分布式-checkpoint-怎么得到"><span>5. Megatron 分布式 checkpoint 怎么得到</span></a>
+<a class="toc-link toc-l2" href="#6-什么是-step-和-epoch-有什么区别"><span>6. 什么是 step，和 epoch 有什么区别</span></a>
+<a class="toc-link toc-l2" href="#7-global-batch-size-global-batch-tokens-rollout-batch-size-micro-batch-size"><span>7. global_batch_size、global_batch_tokens、rollout_batch_size、micro_batch_size</span></a>
+<a class="toc-link toc-l2" href="#8-变长数据如何满足-global-batch-tokens"><span>8. 变长数据如何满足 global_batch_tokens</span></a>
+<a class="toc-link toc-l2" href="#9-max-tokens-per-gpu-32768-怎么来的"><span>9. max_tokens_per_gpu: 32768 怎么来的</span></a>
+<a class="toc-link toc-l2" href="#10-packing-safety-margin-0-98"><span>10. packing_safety_margin: 0.98</span></a>
+<a class="toc-link toc-l2" href="#11-tp-pp-cp-ep-etp-如何配合"><span>11. TP、PP、CP、EP、ETP 如何配合</span></a>
+<a class="toc-link toc-l3" href="#tp-tensor-parallel"><span>TP: Tensor Parallel</span></a>
+<a class="toc-link toc-l3" href="#pp-pipeline-parallel"><span>PP: Pipeline Parallel</span></a>
+<a class="toc-link toc-l3" href="#cp-context-parallel"><span>CP: Context Parallel</span></a>
+<a class="toc-link toc-l3" href="#ep-expert-parallel"><span>EP: Expert Parallel</span></a>
+<a class="toc-link toc-l3" href="#etp-expert-tensor-parallel"><span>ETP: Expert Tensor Parallel</span></a>
+<a class="toc-link toc-l3" href="#它们如何同时存在"><span>它们如何同时存在</span></a>
+<a class="toc-link toc-l2" href="#12-optimizer-和-rng-是什么"><span>12. Optimizer 和 RNG 是什么</span></a>
+<a class="toc-link toc-l2" href="#13-checkpoint-保存逻辑"><span>13. Checkpoint 保存逻辑</span></a>
+<a class="toc-link toc-l2" href="#14-学习率-warmup-decay"><span>14. 学习率、warmup、decay</span></a>
+<a class="toc-link toc-l2" href="#15-lr-decay-iters-和-train-iters-如何事先算"><span>15. lr_decay_iters 和 train_iters 如何事先算</span></a>
+<a class="toc-link toc-l2" href="#16-fp8-为什么能省显存-省在哪里"><span>16. FP8 为什么能省显存，省在哪里</span></a>
+<a class="toc-link toc-l2" href="#17-recompute-是什么"><span>17. Recompute 是什么</span></a>
+<a class="toc-link toc-l2" href="#18-global-batch-tokens-下为什么脚本特别传-lr-decay-iters"><span>18. global_batch_tokens 下为什么脚本特别传 lr_decay_iters</span></a>
+<a class="toc-link toc-l2" href="#19-日志会写到哪里"><span>19. 日志会写到哪里</span></a>
+<a class="toc-link toc-l2" href="#20-正常训练应该长什么样"><span>20. 正常训练应该长什么样</span></a>
+<a class="toc-link toc-l2" href="#21-异常判断和排查"><span>21. 异常判断和排查</span></a>
+<a class="toc-link toc-l3" href="#读不到数据"><span>读不到数据</span></a>
+<a class="toc-link toc-l3" href="#checkpoint-加载失败"><span>checkpoint 加载失败</span></a>
+<a class="toc-link toc-l3" href="#oom"><span>OOM</span></a>
+<a class="toc-link toc-l3" href="#loss-nan-或爆炸"><span>loss NaN 或爆炸</span></a>
+<a class="toc-link toc-l3" href="#loss-不动"><span>loss 不动</span></a>
+<a class="toc-link toc-l3" href="#吞吐低"><span>吞吐低</span></a>
+<a class="toc-link toc-l3" href="#ray-nccl-网络问题"><span>Ray/NCCL 网络问题</span></a>
+<a class="toc-link toc-l2" href="#22-这份配置里值得特别注意的点"><span>22. 这份配置里值得特别注意的点</span></a>
+<a class="toc-link toc-l2" href="#23-新人跑这类任务的检查清单"><span>23. 新人跑这类任务的检查清单</span></a>
+<a class="toc-link toc-l2" href="#参考资料"><span>参考资料</span></a>
+      </nav>
+    </aside>
+
+    <section class="article-shell">
+      <header class="manual-top">
+        <div class="manual-band">
+          <div class="eyebrow">Megatron / slime / long-context SFT</div>
+          <div class="top-meta">约 32 分钟阅读 · 23 个章节 · 8 卡配置</div>
+        </div>
+        <div class="manual-title">
+          <h1>Qwen3.6-35B-A3B SFT 训练配置逐项讲解</h1>
+          <p class="subtitle">把原始 Markdown 整理成更适合新人训练工程师阅读的技术手册：先看参数地形，再深入 step、batch、checkpoint、并行拓扑和排障路径。</p>
+          <div class="chips" aria-label="核心主题">
+            <span class="chip">SFT loss</span>
+            <span class="chip">Megatron checkpoint</span>
+            <span class="chip">CP=4 / EP=8</span>
+            <span class="chip">8M token batch</span>
+            <span class="chip">FP8 + recompute</span>
+          </div>
+        </div>
+        <div class="visual-strip" aria-label="关键参数速览">
+          <div class="metric"><div class="metric-label">Global Batch Tokens</div><div class="metric-value">8.39M</div></div>
+          <div class="metric"><div class="metric-label">Seq Len / CP</div><div class="metric-value">128K / 4</div></div>
+          <div class="metric"><div class="metric-label">Save Interval</div><div class="metric-value">8 step</div></div>
+          <div class="metric"><div class="metric-label">Train Iters</div><div class="metric-value">130</div></div>
+        </div>
+      </header>
+
+      <section class="workflow" aria-labelledby="workflow-title">
+        <div class="rail-title" id="workflow-title">One Optimizer Step</div>
+        <div class="workflow-grid">
+          <div class="flow-step"><b>JSONL</b><span>读取 messages 字段</span></div>
+          <div class="flow-step"><b>Tokenize</b><span>套 chat template 与 loss mask</span></div>
+          <div class="flow-step"><b>Packing</b><span>装到 8M token 预算附近</span></div>
+          <div class="flow-step"><b>FWD/BWD</b><span>micro batch + CP 切序列</span></div>
+          <div class="flow-step"><b>Adam</b><span>梯度规约后更新一次权重</span></div>
+          <div class="flow-step"><b>Checkpoint</b><span>每 8 step 保存分布式分片</span></div>
+        </div>
+      </section>
+
+      <article class="article">
+        <h1 id="qwen3-6-35b-a3b-sft-训练配置逐项讲解"><span>Qwen3.6-35B-A3B SFT 训练配置逐项讲解</span></h1>
+<p>本文基于两个文件：</p>
+<ul><li><code>/Users/shawn/Downloads/train-qw36-xmlsft-nt-lrfix.yaml</code></li><li><code>/Users/shawn/Downloads/sft_qwen36_a3b.sh</code></li></ul>
+<p>结论先放前面：这不是一个“单纯 bash 跑 PyTorch”的脚本，而是一个在容器里启动 Ray 集群，再由 Ray 提交 <code>train_async.py</code> 的 Megatron/slime SFT 任务。YAML 的 <code>envargs</code> 会被平台注入成环境变量，脚本再把环境变量拼成 <code>MODEL_ARGS + CKPT_ARGS + SFT_ARGS + OPTIMIZER_ARGS + PARALLEL_ARGS + MISC_ARGS</code>。所以排查时不要只看 YAML，要看脚本最后是否真的把参数传给了 <code>train_async.py</code>。</p>
+<h2 id="1-这次训练到底在做什么"><span class="section-index">01</span><span>1. 这次训练到底在做什么</span></h2>
+<p>这是一个 SFT，即 supervised fine-tuning，监督微调任务。它不是从零预训练 35B 模型，而是在已有 Qwen3.6-35B-A3B 权重上，用你的 JSONL 对话数据继续训练，让模型更倾向于生成你数据里 assistant 的回答风格。</p>
+<p>一次训练 step 的核心链路是：</p>
+<ol><li>从 JSONL 读一批样本。</li><li>取每条样本里的 <code>messages</code> 字段。</li><li>用 Qwen 的 chat template 把多轮消息变成 token 序列。</li><li>构造 labels：通常只让 assistant 回复部分参与 loss，system/user/padding 不参与。</li><li>把多条变长序列 packing 到一个或多个长序列块里。</li><li>按 <code>micro_batch_size</code> 做 forward。</li><li>算 SFT loss，本质是 next-token cross entropy。</li><li>backward 得到梯度。</li><li>跨 GPU 做必要的通信，比如 DP 梯度规约、CP 序列通信、MoE expert all-to-all。</li><li>Adam optimizer 更新参数。</li><li>学习率 scheduler 前进一步。</li><li>记录日志；如果 step 命中 <code>save_interval</code>，保存 checkpoint。</li></ol>
+<p>这也是理解所有参数的主线：有些参数控制数据如何变成 token，有些控制每个 step 吃多少 token，有些控制模型怎么切到 8 张卡上，有些控制优化器怎么更新，有些控制 checkpoint 和日志。</p>
+<h2 id="2-运行脚本的真实流程"><span class="section-index">02</span><span>2. 运行脚本的真实流程</span></h2>
+<p>脚本大致分成这些阶段：</p>
+<ol><li>启动 GPU keeper，避免平台回收 GPU。</li><li>设置 bash 严格模式、时区、conda。</li><li>解析多机变量：<code>MASTER_ADDR</code>、<code>MASTER_PORT</code>、<code>NNODES</code>、<code>NODE_RANK</code>。</li><li>检查 <code>SLIME_ROOT</code>、<code>MODEL_PATH</code>、<code>REF_LOAD</code>、<code>LOAD_PATH</code>、<code>TRAIN_DATA</code> 是否存在。</li><li>设置 Triton/CUDA 编译缓存目录，减少重复编译。</li><li><code>source &quot;${SLIME_ROOT}/scripts/models/qwen3.5-35B-A3B.sh&quot;</code>，拿到模型结构参数 <code>MODEL_ARGS</code>。</li><li>把 position embedding patch 成 Qwen3.6 的 <code>mrope</code>。</li><li>安装或检查 transformers。</li><li>启动 Ray head/worker。</li><li>rank0 上执行：</li></ol>
+
+        <figure class="code-shell" data-lang="bash">
+          <figcaption><span>bash</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>python3 train_async.py \
+  --actor-num-nodes &quot;${NNODES}&quot; \
+  --actor-num-gpus-per-node &quot;${GPUS_PER_NODE}&quot; \
+  &quot;${MODEL_ARGS[@]}&quot; \
+  &quot;${CKPT_ARGS[@]}&quot; \
+  &quot;${SFT_ARGS[@]}&quot; \
+  &quot;${OPTIMIZER_ARGS[@]}&quot; \
+  &quot;${PARALLEL_ARGS[@]}&quot; \
+  &quot;${MISC_ARGS[@]}&quot; \
+  &quot;${WANDB_ARGS[@]}&quot;</code></pre>
+        </figure>
+      
+<p>一个重要细节：<code>micro_batch_size</code>、<code>seq_len</code>、<code>train_iters</code>、<code>chunked_lm_head</code> 这些在主脚本里没有直接搜到传参位置，很可能被 <code>qwen3.5-35B-A3B.sh</code> 这个被 source 的模型脚本消费，也可能由训练框架直接读环境变量。真正排查时要在运行日志里找最终命令，确认是否出现了 <code>--micro-batch-size</code>、<code>--seq-length</code>、<code>--train-iters</code> 等参数。</p>
+<h2 id="3-input-key-messages-是什么"><span class="section-index">03</span><span>3. <code>input_key: messages</code> 是什么</span></h2>
+<p>YAML 里：</p>
+
+        <figure class="code-shell" data-lang="yaml">
+          <figcaption><span>yaml</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>input_key: messages</code></pre>
+        </figure>
+      
+<p>脚本中对应：</p>
+
+        <figure class="code-shell" data-lang="bash">
+          <figcaption><span>bash</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>--prompt-data &quot;${TRAIN_DATA}&quot;
+--input-key &quot;${INPUT_KEY:-messages}&quot;</code></pre>
+        </figure>
+      
+<p>意思是：训练数据是 JSONL，每一行是一条 JSON，训练代码会从每行 JSON 里取 <code>messages</code> 这个字段作为对话内容。</p>
+<p>典型样子：</p>
+
+        <figure class="code-shell" data-lang="json">
+          <figcaption><span>json</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>{&quot;messages&quot;:[{&quot;role&quot;:&quot;system&quot;,&quot;content&quot;:&quot;...&quot;},{&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:&quot;...&quot;},{&quot;role&quot;:&quot;assistant&quot;,&quot;content&quot;:&quot;...&quot;}]}</code></pre>
+        </figure>
+      
+<p>SFT 不应该让模型学习“复读 user prompt”，而是学习“在这些上下文后生成 assistant 回复”。所以数据进入模型后会做 loss mask：user/system token 通常只作为上下文，assistant token 才作为预测目标。你脚本里有：</p>
+
+        <figure class="code-shell" data-lang="bash">
+          <figcaption><span>bash</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>--loss-type sft_loss
+--loss-mask-type qwen3_5
+--calculate-per-token-loss</code></pre>
+        </figure>
+      
+<p>这说明训练 loss 是 SFT cross entropy，并按 Qwen 的消息格式生成 mask。排查数据问题时，<code>input_key</code> 错了会导致读不到样本；messages 格式错了会导致 chat template 或 loss mask 异常；assistant 内容为空会导致有效训练 token 极少，loss 看起来不动。</p>
+<h2 id="4-load-path-ref-load-model-path-的区别"><span class="section-index">04</span><span>4. <code>load_path</code>、<code>ref_load</code>、<code>model_path</code> 的区别</span></h2>
+<p>YAML 里有三类路径：</p>
+
+        <figure class="code-shell" data-lang="yaml">
+          <figcaption><span>yaml</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>model_path: .../Qwen3.6-35B-A3B
+load_path: .../Qwen3.6-35B-A3B_torch_dist_tp2_pp1_cp1_ep8_mrope
+ref_load:  .../Qwen3.6-35B-A3B_torch_dist_tp2_pp1_cp1_ep8_mrope
+save_path: .../lhs_train_qw36</code></pre>
+        </figure>
+      
+<p>脚本对应：</p>
+
+        <figure class="code-shell" data-lang="bash">
+          <figcaption><span>bash</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>--hf-checkpoint &quot;${MODEL_PATH}&quot;
+--ref-load &quot;${REF_LOAD}&quot;
+--load &quot;${LOAD_PATH}&quot;
+--save &quot;${SAVE_PATH}&quot;</code></pre>
+        </figure>
+      
+<p><code>model_path</code> 是 HuggingFace 格式目录，通常有 <code>config.json</code>、tokenizer 文件、若干 <code>safetensors</code> 权重分片。脚本用它加载 config、tokenizer 和 Qwen 动态代码。</p>
+<p><code>load_path</code> 是训练实际加载的 Megatron 分布式 checkpoint。训练不是直接读 HF safetensors，而是读已经转换成 Megatron 分布式格式的权重。</p>
+<p><code>save_path</code> 是本次训练输出 checkpoint 的目录。</p>
+<p><code>ref_load</code> 是 reference model checkpoint。对于 PPO/GRPO/DPO 这类 RLHF 或偏好训练，reference model 是冻结的基准模型，用于计算 KL 或 reference logprob，防止当前模型偏离太远。你这次是 SFT，脚本里还传了：</p>
+
+        <figure class="code-shell" data-lang="bash">
+          <figcaption><span>bash</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>--disable-compute-advantages-and-returns
+--debug-train-only
+--loss-type sft_loss</code></pre>
+        </figure>
+      
+<p>所以它不是典型 RL 训练。这里保留 <code>ref_load</code> 更像是 slime 框架统一接口的要求，或用于初始化/reference actor/对齐 checkpoint。因为你的 <code>load_path</code> 和 <code>ref_load</code> 相同，首轮 SFT 就是从 base/reference 权重起步。</p>
+<h2 id="5-megatron-分布式-checkpoint-怎么得到"><span class="section-index">05</span><span>5. Megatron 分布式 checkpoint 怎么得到</span></h2>
+<p>原始开源模型一般是 HF checkpoint；Megatron 训练需要把权重切成与 Megatron 并行拓扑匹配或可重分片的分布式 checkpoint。</p>
+<p>转换流程通常是：</p>
+<ol><li>读取 HF 模型 config/tokenizer/权重。</li><li>用 Megatron/Bridge/slime 构造相同结构的 Qwen MoE 模型。</li><li>做参数名映射：例如 QKV 合并/拆分、MLP gate/up/down 权重映射、MoE expert 权重映射。</li><li>按 TP/PP/EP 等并行方式切分权重。</li><li>写出 Megatron distributed checkpoint 元数据和各 rank 分片。</li></ol>
+<p>你路径里的名字：</p>
+
+        <figure class="code-shell" data-lang="text">
+          <figcaption><span>text</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>Qwen3.6-35B-A3B_torch_dist_tp2_pp1_cp1_ep8_mrope</code></pre>
+        </figure>
+      
+<p>大概表示这个 checkpoint 是 <code>torch_dist</code> 格式，转换时的形状是 <code>TP=2, PP=1, CP=1, EP=8</code>，并且使用 <code>mrope</code>。你的训练 YAML 是 <code>TP=1, PP=1, CP=4, EP=8</code>。如果底层 distributed checkpoint 支持重分片，加载时可以从一种并行形状恢复到另一种形状；如果自定义 Qwen/MoE/mrope conversion 不完全支持，就会出现 shape mismatch、missing key、unexpected key、rank shard 不匹配等错误。</p>
+<p>实际工程里，拿到 Megatron checkpoint 的方式通常有三种：</p>
+<ol><li>官方或平台已经提前转换好，你直接填 <code>load_path</code>。</li><li>用 Megatron Bridge 或项目里的 conversion script 从 HF 转。</li><li>从前一次 Megatron 训练任务的 <code>save_path</code> 继续训。</li></ol>
+<p>排查转换是否正确，重点看：</p>
+<ul><li>checkpoint 目录是否完整，不能只拷贝某个 rank 分片。</li><li>是否有最新 iteration 元数据，比如 <code>latest_checkpointed_iteration.txt</code> 一类文件。</li><li>转换使用的 Qwen 结构、mrope、MoE expert 数、tokenizer 是否与训练一致。</li><li>load 日志里是否显示成功加载所有参数。</li></ul>
+<h2 id="6-什么是-step-和-epoch-有什么区别"><span class="section-index">06</span><span>6. 什么是 step，和 epoch 有什么区别</span></h2>
+<p>在你的脚本里，<code>save_interval: 8</code> 表示每 8 个训练 iteration 保存一次；这里的 iteration/step 通常指一次 optimizer update，而不是一次 forward，也不是一条样本。</p>
+<p>一次 optimizer step 包含：</p>
+<ol><li>取够一个 global batch，或者取够 <code>global_batch_tokens</code>。</li><li>切成多个 micro-batch。</li><li>每个 micro-batch forward/backward，梯度累积起来。</li><li>梯度通信和规约。</li><li>optimizer 更新一次模型权重。</li><li>learning rate scheduler 前进一步。</li></ol>
+<p>所以 <code>step=8</code> 的含义是模型参数已经更新了 8 次。</p>
+<p>epoch 是数据概念，表示“完整看完一遍训练集”。<code>num_epoch: 3</code> 表示数据层面重复 3 遍。区别是：</p>
+<ul><li>step 关心参数更新次数。</li><li>epoch 关心数据集被遍历了几遍。</li></ul>
+<p>当所有样本长度差不多时，可以粗略说：</p>
+
+        <figure class="code-shell" data-lang="text">
+          <figcaption><span>text</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>steps_per_epoch = ceil(num_samples / global_batch_size)</code></pre>
+        </figure>
+      
+<p>但你这里用了 token-based batching：</p>
+
+        <figure class="code-shell" data-lang="yaml">
+          <figcaption><span>yaml</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>global_batch_tokens: 8388608</code></pre>
+        </figure>
+      
+<p>更合理的估算是：</p>
+
+        <figure class="code-shell" data-lang="text">
+          <figcaption><span>text</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>steps_per_epoch = ceil(total_tokens_one_epoch / global_batch_tokens)
+train_steps ≈ steps_per_epoch * num_epoch</code></pre>
+        </figure>
+      
+<p>因此 step 数要用 tokenizer 实际统计后的 token 数来估。</p>
+<h2 id="7-global-batch-size-global-batch-tokens-rollout-batch-size-micro-batch-size"><span class="section-index">07</span><span>7. <code>global_batch_size</code>、<code>global_batch_tokens</code>、<code>rollout_batch_size</code>、<code>micro_batch_size</code></span></h2>
+<p>这几个最容易混。</p>
+<p><code>micro_batch_size: 1</code>：每张 GPU 在一次 forward/backward 里处理的样本数。长上下文 128K 非常吃激活显存，所以这里设成 1 很常见。micro batch 小不代表全局 batch 小，因为可以梯度累积，也可以多 GPU 并行。</p>
+<p><code>global_batch_size: 1024</code>：一次 optimizer update 覆盖的全局样本数目标，跨所有 GPU、所有 data parallel rank、所有梯度累积。没有 token batching 时，它就是每 step 的样本数。</p>
+<p><code>global_batch_tokens: 8388608</code>：一次 optimizer update 覆盖的全局 token 数目标，即 8,388,608 tokens，约 8M tokens。设置它后，训练更像“每步固定 token 预算”，而不是“每步固定样本条数”。对于变长数据，这个更稳定，因为显存、计算量、loss 统计都主要由 token 数决定。</p>
+<p><code>rollout_batch_size: 1024</code>：rollout 阶段一次从数据源取/处理的样本块大小。SFT 里 rollout 不是让模型生成答案，而是 <code>slime.rollout.sft_rollout.generate_rollout</code> 这类函数负责读样本、tokenize、构造训练 batch。它更像数据生产端的批大小/缓冲大小。</p>
+<p>一句话区分：</p>
+<ul><li><code>micro_batch_size</code>：单次 forward/backward 每 GPU 吃多少样本。</li><li><code>global_batch_size</code>：一个 optimizer step 总共多少样本。</li><li><code>global_batch_tokens</code>：一个 optimizer step 总共多少 token。</li><li><code>rollout_batch_size</code>：数据/rollout 侧一次处理多少原始样本。</li></ul>
+<h2 id="8-变长数据如何满足-global-batch-tokens"><span class="section-index">08</span><span>8. 变长数据如何满足 <code>global_batch_tokens</code></span></h2>
+<p>每条训练数据 token 长度不固定，所以不可能严格保证每步正好等于 8,388,608 tokens。框架一般会这样做：</p>
+<ol><li>先 tokenize，知道每条样本长度。</li><li>按 <code>seq_len</code> 截断或过滤超长样本。</li><li>把多个短样本 packing 到长序列块中。</li><li>贪心或近似装箱，让每个 step 的 token 总数接近 <code>global_batch_tokens</code>。</li><li>对不足的位置 padding，并用 mask 避免 padding 参与 loss。</li><li>如果启用了 <code>data_pad_size_multiplier: 4096</code>，还会把长度向 4096 的倍数对齐。</li></ol>
+<p>所以实际 token 数是“接近预算”，不是数学上恒等。你脚本里同时打开：</p>
+
+        <figure class="code-shell" data-lang="bash">
+          <figcaption><span>bash</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>--use-dynamic-batch-size
+--max-tokens-per-gpu 32768
+--packing-safety-margin 0.98
+--data-pad-size-multiplier 4096
+--global-batch-tokens 8388608</code></pre>
+        </figure>
+      
+<p>这说明它会动态决定每个 micro batch/step 能塞多少 token，同时留显存余量。</p>
+<h2 id="9-max-tokens-per-gpu-32768-怎么来的"><span class="section-index">09</span><span>9. <code>max_tokens_per_gpu: 32768</code> 怎么来的</span></h2>
+<p>你的 YAML：</p>
+
+        <figure class="code-shell" data-lang="yaml">
+          <figcaption><span>yaml</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>seq_len: 131072
+context_parallel_size: 4
+max_tokens_per_gpu: 32768</code></pre>
+        </figure>
+      
+<p>这三个数正好满足：</p>
+
+        <figure class="code-shell" data-lang="text">
+          <figcaption><span>text</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>131072 / 4 = 32768</code></pre>
+        </figure>
+      
+<p>这不是巧合。CP=4 时，一个 128K 上下文会沿序列维度切到 4 个 context parallel rank 上，每个 rank 本地大约处理 32K token 的序列片段。<code>max_tokens_per_gpu=32768</code> 就是在告诉 dynamic batching：每张 GPU 本地 token 上限大约是 32K。</p>
+<p>如果 CP=8，类似上限会变成：</p>
+
+        <figure class="code-shell" data-lang="text">
+          <figcaption><span>text</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>131072 / 8 = 16384</code></pre>
+        </figure>
+      
+<p>脚本默认值正好是 <code>16384</code>，说明它以前的默认注释/参数更偏向 CP=8，而你的 YAML 改成了 CP=4。</p>
+<p>这个参数不是从模型参数量直接公式算出来的，而是结合以下因素压测出来的：</p>
+<ul><li>序列长度 <code>seq_len</code></li><li>CP 切分数</li><li>GPU 显存大小</li><li>是否保存 optimizer 状态</li><li>是否开启 recompute</li><li>是否开启 FP8</li><li>attention 实现</li><li>MoE expert 权重如何切分</li><li>padding/packing 带来的额外浪费</li></ul>
+<p>如果 OOM，优先降低 <code>max_tokens_per_gpu</code> 或增大 CP；如果吞吐低且显存很空，可以试着提高它。</p>
+<h2 id="10-packing-safety-margin-0-98"><span class="section-index">10</span><span>10. <code>packing_safety_margin: 0.98</code></span></h2>
+<p>packing 时理论上每张卡最多 32768 tokens，但实际训练还会有 padding、kernel workspace、通信 buffer、临时张量、碎片化。<code>0.98</code> 表示只用 98% 的理论容量，留 2% 安全边界。</p>
+<p>粗略看：</p>
+
+        <figure class="code-shell" data-lang="text">
+          <figcaption><span>text</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>32768 * 0.98 ≈ 32112</code></pre>
+        </figure>
+      
+<p>再加上 <code>data_pad_size_multiplier=4096</code>，实际可装箱边界会受到 4096 对齐影响。这个参数能减少“看起来没超上限但实际 OOM”的情况，代价是轻微降低 packing 利用率。</p>
+<h2 id="11-tp-pp-cp-ep-etp-如何配合"><span class="section-index">11</span><span>11. TP、PP、CP、EP、ETP 如何配合</span></h2>
+<p>你的 YAML：</p>
+
+        <figure class="code-shell" data-lang="yaml">
+          <figcaption><span>yaml</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>gpus_per_node: 8
+tensor_model_parallel_size: 1
+pipeline_model_parallel_size: 1
+context_parallel_size: 4
+expert_model_parallel_size: 8
+expert_tensor_parallel_size: 1</code></pre>
+        </figure>
+      
+<p>脚本把它们传成：</p>
+
+        <figure class="code-shell" data-lang="bash">
+          <figcaption><span>bash</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>--tensor-model-parallel-size 1
+--pipeline-model-parallel-size 1
+--context-parallel-size 4
+--expert-model-parallel-size 8
+--expert-tensor-parallel-size 1</code></pre>
+        </figure>
+      
+<h3 id="tp-tensor-parallel"><span>TP: Tensor Parallel</span></h3>
+<p>TP 把单层里的大矩阵切到多张 GPU 上，例如 attention projection 或 MLP projection。<code>TP=1</code> 表示不切 dense 矩阵。好处是通信少、实现简单；代价是每张相关 GPU 要放完整 dense 权重。</p>
+<p>脚本里只有 <code>TP &gt; 1</code> 才加：</p>
+
+        <figure class="code-shell" data-lang="bash">
+          <figcaption><span>bash</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>--sequence-parallel</code></pre>
+        </figure>
+      
+<p>你这里 TP=1，所以 sequence parallel 不启用。</p>
+<h3 id="pp-pipeline-parallel"><span>PP: Pipeline Parallel</span></h3>
+<p>PP 把 Transformer 层按深度切开，例如前 20 层在一组 GPU，后 20 层在另一组 GPU。<code>PP=1</code> 表示不切层。好处是没有 pipeline bubble，也没有 stage 间激活发送；代价是每个模型副本要容纳全部层。</p>
+<h3 id="cp-context-parallel"><span>CP: Context Parallel</span></h3>
+<p>CP 沿序列长度切分激活。你的上下文长度是 131072，非常长；CP=4 后每张 GPU 本地只处理约 32768 token 的片段。CP 主要降低长上下文 attention/activation 显存压力，但不会把模型权重本身变小。</p>
+<p>代价是 attention 需要跨 CP rank 通信，尤其 KV/梯度需要 all-gather、reduce-scatter 或 ring 通信。长上下文训练里 CP 往往是必要的。</p>
+<h3 id="ep-expert-parallel"><span>EP: Expert Parallel</span></h3>
+<p>Qwen3.6-35B-A3B 是 MoE 模型。MoE 不是每个 token 都走全部参数，而是由 router 把 token 分发给部分 expert，所以“总参数量 35B”和“每 token 激活参数 A3B”不同。</p>
+<p>EP 把 MoE expert 权重分布到多张 GPU 上。<code>EP=8</code> 表示 expert 维度跨 8 张 GPU 切分。好处是每张 GPU 不用放所有 expert 权重；代价是 token 要通过 all-to-all 发到对应 expert 所在 GPU，通信和负载均衡变得很重要。</p>
+<h3 id="etp-expert-tensor-parallel"><span>ETP: Expert Tensor Parallel</span></h3>
+<p>ETP 是 expert 内部的 tensor parallel。<code>ETP=1</code> 表示每个 expert 内部不再切矩阵。这通常更简单，也避免 expert MLP GEMM 上额外 TP 通信。</p>
+<h3 id="它们如何同时存在"><span>它们如何同时存在</span></h3>
+<p>一张 GPU rank 会同时属于多个通信组：TP 组、PP 组、CP 组、EP 组、DP 组。dense attention/非 MoE 层主要受 TP/PP/CP 影响；MoE sparse MLP 层额外受 EP/ETP 影响。</p>
+<p>需要注意：不同 Megatron 版本对 CP、EP、DP 的组构造细节不同。NVIDIA 文档也把 EP 描述为可以和 TP/CP/PP/DP/FSDP 等组合，但具体 rank folding 由实现决定。因此你上线前要在日志里找初始化打印的：</p>
+<ul><li>tensor model parallel size</li><li>pipeline model parallel size</li><li>context parallel size</li><li>expert model parallel size</li><li>data parallel size</li><li>world size</li></ul>
+<p>不要只用“几个数字相乘”在脑子里推断是否可行。尤其你这里单节点 8 卡、CP=4、EP=8，看起来组合很激进，必须以 Megatron 初始化日志为准。</p>
+<h2 id="12-optimizer-和-rng-是什么"><span class="section-index">12</span><span>12. Optimizer 和 RNG 是什么</span></h2>
+<p><code>optimizer</code> 是优化器。你脚本中是：</p>
+
+        <figure class="code-shell" data-lang="bash">
+          <figcaption><span>bash</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>--optimizer adam
+--adam-beta1 0.9
+--adam-beta2 0.98
+--weight-decay 0.1
+--use-distributed-optimizer
+--use-precision-aware-optimizer</code></pre>
+        </figure>
+      
+<p>Adam 不只保存模型参数，还保存一阶动量 <code>m</code>、二阶动量 <code>v</code>，很多混合精度训练还保存 FP32 master weights。它们非常占显存/磁盘。分布式优化器会把 optimizer state 在 data parallel rank 之间切分，降低每卡 optimizer 状态内存。</p>
+<p><code>RNG</code> 是 random number generator state，随机数状态。训练里的随机性来自：</p>
+<ul><li>数据 shuffle</li><li>dropout</li><li>MoE router 中可能的随机策略</li><li>kernel 中可能的随机或非确定行为</li></ul>
+<p>保存 RNG 的意义是：中断后 resume，可以尽量复现“如果不中断，下一步会看到什么数据/随机 mask”。不保存 RNG，继续训练通常还能训，但不是 bit-level 精确续训。</p>
+<p>你的 YAML 写：</p>
+
+        <figure class="code-shell" data-lang="yaml">
+          <figcaption><span>yaml</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>save_optimizer: 'false'
+save_rng: '0'
+load_optim: '0'
+load_rng: '0'</code></pre>
+        </figure>
+      
+<p>脚本明确做了：</p>
+
+        <figure class="code-shell" data-lang="bash">
+          <figcaption><span>bash</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>--no-save-optim
+--no-load-optim
+--no-load-rng</code></pre>
+        </figure>
+      
+<p>但我在主脚本里没有看到 <code>SAVE_RNG</code> 映射到 <code>--no-save-rng</code>。也就是说，“不加载 RNG”是明确生效的；“不保存 RNG”是否生效，要看 <code>qwen3.5-35B-A3B.sh</code> 或训练框架是否读取环境变量。Megatron checkpoint 文档里 <code>save_rng</code> 默认通常是 true，所以这里建议你在实际 checkpoint 目录里确认是否保存了 RNG state。</p>
+<p>不保存 optimizer 的后果：</p>
+<ul><li>checkpoint 小很多。</li><li>更适合作为最终模型权重或后续新实验起点。</li><li>不适合严格 resume，因为 Adam 动量会丢。</li><li>如果中断后从该 checkpoint 继续，loss 可能短暂抖动，因为 optimizer moments 重新开始。</li></ul>
+<h2 id="13-checkpoint-保存逻辑"><span class="section-index">13</span><span>13. Checkpoint 保存逻辑</span></h2>
+<p>YAML：</p>
+
+        <figure class="code-shell" data-lang="yaml">
+          <figcaption><span>yaml</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>save_interval: 8
+save_path: /mnt/cfs_bj_mt/models/experiments/lhs_train_qw36</code></pre>
+        </figure>
+      
+<p>脚本：</p>
+
+        <figure class="code-shell" data-lang="bash">
+          <figcaption><span>bash</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>--save &quot;${SAVE_PATH}&quot;
+--save-interval &quot;${SAVE_INTERVAL:-100}&quot;</code></pre>
+        </figure>
+      
+<p>含义：每 8 个 optimizer step 保存一次 checkpoint。若总共 130 step，理论上会在 8、16、24、...、128 保存。第 130 步是否额外保存 final checkpoint，要看训练框架是否有“退出前保存”逻辑，不能默认认为一定有。</p>
+<p>Megatron distributed checkpoint 不是一个单文件，而是一个目录树，里面有元数据和各 rank 分片。拷贝/迁移时要整个目录一起拷。</p>
+<p>常见 checkpoint 排查：</p>
+<ul><li>目录为空：任务没跑到第一个 save interval，或 <code>SAVE_PATH</code> 没权限。</li><li>只有部分文件：保存时任务被杀，checkpoint 可能损坏。</li><li>resume 报 optimizer key 缺失：你用了 <code>--no-save-optim</code> 保存，却没加 <code>--no-load-optim</code> 读取；这个脚本已经处理了。</li><li>shape mismatch：模型结构、mrope、MoE expert、TP/PP/EP 或 tokenizer/config 不一致。</li><li>续训 loss 抖动：optimizer/RNG 没保存，属于预期风险。</li></ul>
+<h2 id="14-学习率-warmup-decay"><span class="section-index">14</span><span>14. 学习率、warmup、decay</span></h2>
+<p>YAML：</p>
+
+        <figure class="code-shell" data-lang="yaml">
+          <figcaption><span>yaml</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>max_lr: '2.0e-05'
+min_lr: '2.0e-06'
+lr_warmup_fraction: '0.03'
+lr_decay_iters: 115
+train_iters: 130</code></pre>
+        </figure>
+      
+<p>脚本：</p>
+
+        <figure class="code-shell" data-lang="bash">
+          <figcaption><span>bash</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>--lr &quot;${LR}&quot;
+--lr-decay-style cosine
+--min-lr &quot;${MIN_LR}&quot;
+--lr-warmup-fraction &quot;${LR_WARMUP_FRACTION}&quot;
+--lr-decay-iters &quot;${LR_DECAY_ITERS}&quot;</code></pre>
+        </figure>
+      
+<p>warmup 是训练最开始不要立刻用最大 LR，而是在前若干 step 逐步升到 <code>max_lr</code>。原因是初始阶段 optimizer 动量还没稳定，数据 batch/packing 也可能波动，直接大 LR 容易 loss spike 或 NaN。</p>
+<p>Megatron 系列里 warmup 通常是线性 warmup。粗略公式：</p>
+
+        <figure class="code-shell" data-lang="text">
+          <figcaption><span>text</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>warmup_steps ≈ lr_warmup_fraction * lr_decay_iters
+lr(step) ≈ max_lr * step / warmup_steps</code></pre>
+        </figure>
+      
+<p>你的配置：</p>
+
+        <figure class="code-shell" data-lang="text">
+          <figcaption><span>text</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>115 * 0.03 = 3.45</code></pre>
+        </figure>
+      
+<p>所以 warmup 约 3 到 4 个 step。如果按 <code>train_iters=130</code> 算，也是约 4 个 step。之后进入 cosine decay：</p>
+
+        <figure class="code-shell" data-lang="text">
+          <figcaption><span>text</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>lr = min_lr + 0.5 * (max_lr - min_lr) * (1 + cos(pi * progress))</code></pre>
+        </figure>
+      
+<p><code>lr_decay_iters=115</code> 小于 <code>train_iters=130</code>，意味着大约前 115 step 完成 cosine 衰减，后面可能维持在 <code>min_lr=2e-6</code> 附近再训 15 step。这可能是有意让最后阶段低 LR 收敛。</p>
+<p>但是注意：主脚本里没有直接搜到 <code>TRAIN_ITERS</code> 被传给 <code>train_async.py</code>。它可能在 sourced 的 <code>MODEL_ARGS</code> 里，也可能由 <code>num_epoch</code> 控制停止。如果日志最终命令没有 <code>--train-iters 130</code>，那 <code>train_iters: 130</code> 可能只是平台层或模型脚本层参数，不一定在主脚本直接生效。</p>
+<h2 id="15-lr-decay-iters-和-train-iters-如何事先算"><span class="section-index">15</span><span>15. <code>lr_decay_iters</code> 和 <code>train_iters</code> 如何事先算</span></h2>
+<p>因为你启用了 <code>global_batch_tokens</code>，应该按 token 算：</p>
+
+        <figure class="code-shell" data-lang="text">
+          <figcaption><span>text</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>total_train_tokens = sum(tokenized_length_after_chat_template_and_truncation) * num_epoch
+train_iters = ceil(total_train_tokens / global_batch_tokens)</code></pre>
+        </figure>
+      
+<p>你的数字可反推：</p>
+
+        <figure class="code-shell" data-lang="text">
+          <figcaption><span>text</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>global_batch_tokens = 8,388,608
+train_iters = 130
+总训练 token 预算 ≈ 1,090,519,040
+num_epoch = 3
+单 epoch token 量 ≈ 363,506,347</code></pre>
+        </figure>
+      
+<p><code>lr_decay_iters=115</code> 对应：</p>
+
+        <figure class="code-shell" data-lang="text">
+          <figcaption><span>text</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>115 * 8,388,608 ≈ 964,689,920 tokens</code></pre>
+        </figure>
+      
+<p>也就是说 LR 在约 0.965B token 处衰减到下界，剩余约 0.126B token 低学习率训练。</p>
+<p>准确计算必须用同一个 tokenizer、同一个 chat template、同一个 loss mask 和截断策略预处理数据。只用文件大小或字符数估是不可靠的。</p>
+<h2 id="16-fp8-为什么能省显存-省在哪里"><span class="section-index">16</span><span>16. FP8 为什么能省显存，省在哪里</span></h2>
+<p>YAML：</p>
+
+        <figure class="code-shell" data-lang="yaml">
+          <figcaption><span>yaml</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>use_fp8: 'true'
+fp8_format: e4m3
+fp8_recipe: mxfp8</code></pre>
+        </figure>
+      
+<p>脚本：</p>
+
+        <figure class="code-shell" data-lang="bash">
+          <figcaption><span>bash</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>--fp8-format e4m3
+--fp8-recipe mxfp8</code></pre>
+        </figure>
+      
+<p>FP8 把部分训练计算中的 activation/weight 临时表示从 BF16/FP16 的 16 bit 降到 8 bit。它主要节省：</p>
+<ul><li>forward/backward 中保存的部分 activation 或中间 tensor。</li><li>GEMM 输入输出相关的临时 buffer。</li><li>某些通信带宽。</li><li>某些 kernel workspace 或 cache。</li></ul>
+<p>它通常不会把所有东西都变成 8 bit。训练的主权重、optimizer state、master weights、Adam moments 往往仍然是 BF16/FP32 或框架自己的 precision-aware 格式。所以 FP8 不是“显存直接减半”，而是对 activation-bound、GEMM-bound、长上下文场景非常有帮助。</p>
+<p><code>e4m3</code> 表示 4 位 exponent、3 位 mantissa，精度相对好但动态范围有限。<code>mxfp8</code> 是 microscaling 风格的 FP8 recipe，用分块 scale 降低溢出/下溢风险。</p>
+<p>代价：</p>
+<ul><li>数值误差变大。</li><li>可能出现 loss spike、NaN/Inf。</li><li>对硬件、TransformerEngine、kernel 版本要求高。</li><li>最终质量可能略差，需要和 BF16 baseline 对比。</li></ul>
+<p>排查建议：</p>
+<ul><li>第一次跑最好有一组 BF16/FP8 off 的小步数对照。</li><li>观察 <code>train/loss</code> 是否突然 NaN。</li><li>观察是否有 FP8 amax/scale overflow 相关日志。</li><li>如果一开 FP8 就异常，先关 FP8，不要同时调 LR、batch、数据，避免混淆变量。</li></ul>
+<h2 id="17-recompute-是什么"><span class="section-index">17</span><span>17. Recompute 是什么</span></h2>
+<p>YAML：</p>
+
+        <figure class="code-shell" data-lang="yaml">
+          <figcaption><span>yaml</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>recompute_granularity: full
+recompute_method: uniform
+recompute_num_layers: '1'
+recompute_loss_function: 'true'</code></pre>
+        </figure>
+      
+<p>脚本在 <code>full</code> 时传：</p>
+
+        <figure class="code-shell" data-lang="bash">
+          <figcaption><span>bash</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>--recompute-granularity full
+--recompute-method uniform
+--recompute-num-layers 1
+--recompute-loss-function</code></pre>
+        </figure>
+      
+<p>正常反向传播需要保存 forward 的中间激活。长上下文下，activation 显存非常大。recompute/checkpointing 的思路是：forward 时少存一些中间结果，backward 时需要时再重新算一遍。</p>
+<p>好处：省显存。</p>
+<p>代价：增加计算量，训练更慢。</p>
+<p><code>full</code> 最省显存；<code>selective</code> 只重算部分模块，通常更快但省得少；<code>none</code> 最快但最吃显存。</p>
+<p>你这里 <code>full + CP=4 + FP8</code> 是偏保守的长上下文显存方案。若显存很空、吞吐低，可以尝试 <code>selective</code>；若 OOM，保持 <code>full</code>。</p>
+<h2 id="18-global-batch-tokens-下为什么脚本特别传-lr-decay-iters"><span class="section-index">18</span><span>18. <code>global_batch_tokens</code> 下为什么脚本特别传 <code>lr_decay_iters</code></span></h2>
+<p>脚本注释写得很关键：token batch 下真实 step 数应该按总 token / 每步 token 预算计算。如果框架退回按样本数估算，cosine LR 可能过早衰减到 <code>min_lr</code>，后面大量 step 都在低 LR “空转”。</p>
+<p>所以这段很重要：</p>
+
+        <figure class="code-shell" data-lang="bash">
+          <figcaption><span>bash</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>if [[ -n &quot;${LR_DECAY_ITERS:-}&quot; ]]; then
+  OPTIMIZER_ARGS+=(--lr-decay-iters &quot;${LR_DECAY_ITERS}&quot;)
+fi</code></pre>
+        </figure>
+      
+<p>你的 YAML 设置了 <code>lr_decay_iters: 115</code>，平台若正确注入成 <code>LR_DECAY_ITERS=115</code>，这个参数就会生效。</p>
+<h2 id="19-日志会写到哪里"><span class="section-index">19</span><span>19. 日志会写到哪里</span></h2>
+<p>脚本把训练日志和资源采样写到：</p>
+
+        <figure class="code-shell" data-lang="text">
+          <figcaption><span>text</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>/mnt/cfs_bj_mt/workspace/guru4elephant/shared/jobstate/&lt;SAVE_PATH最后一段&gt;/</code></pre>
+        </figure>
+      
+<p>对你的 <code>save_path=/mnt/cfs_bj_mt/models/experiments/lhs_train_qw36</code>，目录名大概率是：</p>
+
+        <figure class="code-shell" data-lang="text">
+          <figcaption><span>text</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>/mnt/cfs_bj_mt/workspace/guru4elephant/shared/jobstate/lhs_train_qw36/</code></pre>
+        </figure>
+      
+<p>里面有：</p>
+<ul><li><code>train.log</code>：rank0 训练 stdout 全量日志。</li><li><code>resources.jsonl</code>：每 20 秒一次 GPU 利用率、显存、功耗。</li><li><code>status.json</code>：最近一次解析出的 step、tgs、tflops、loss、rollout_time、GPU 状态。</li></ul>
+<p>脚本会 grep 这些指标：</p>
+
+        <figure class="code-shell" data-lang="text">
+          <figcaption><span>text</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>step
+perf/train_tgs
+perf/actor_train_tflops
+train/loss
+perf/rollout_time
+GPU utilization / memory / power</code></pre>
+        </figure>
+      
+<p>WandB 在 YAML 里是：</p>
+
+        <figure class="code-shell" data-lang="yaml">
+          <figcaption><span>yaml</span><button class="copy-code" type="button">Copy</button></figcaption>
+          <pre><code>use_wandb: 'false'
+wandb_mode: disabled</code></pre>
+        </figure>
+      
+<p>所以默认不会上报 WandB。<code>tensorboard_path</code> 在 YAML 里有，但主脚本没有直接搜到传参位置，可能在 sourced 模型脚本或框架里消费，需看最终命令/日志确认。</p>
+<h2 id="20-正常训练应该长什么样"><span class="section-index">20</span><span>20. 正常训练应该长什么样</span></h2>
+<p>正常现象：</p>
+<ul><li>Ray head 正常启动。</li><li>单机时 <code>NNODES=1</code>，<code>wait_for_all_nodes</code> 会直接通过；多机时日志显示所有节点 alive。</li><li>transformers import ok。</li><li>AutoConfig/AutoTokenizer preload 成功。</li><li>load checkpoint 成功，无 missing/unexpected/shape mismatch。</li><li>第 0/1 step 前可能编译很久，尤其 Triton/FlashAttention/TE kernel 首次运行。</li><li>过了编译期后 GPU 利用率上升，功耗稳定。</li><li><code>train/loss</code> 是有限数字，不是 NaN/Inf。</li><li><code>perf/train_tgs</code> 和 <code>actor_train_tflops</code> 在前几步后趋于稳定。</li><li>每 8 step 在 <code>save_path</code> 出现 checkpoint。</li></ul>
+<p>loss 是否“应该单调下降”不要太教条。SFT 大模型、变长 packing、token mask、数据混合会让 step loss 有噪声。更重要的是：</p>
+<ul><li>不 NaN。</li><li>没有持续爆炸。</li><li>移动平均缓慢下降或稳定。</li><li>和 BF16/历史同类任务相比量级合理。</li></ul>
+<h2 id="21-异常判断和排查"><span class="section-index">21</span><span>21. 异常判断和排查</span></h2>
+<h3 id="读不到数据"><span>读不到数据</span></h3>
+<p>现象：</p>
+<ul><li><code>TRAIN_DATA ... does not exist</code></li><li>rollout 为空</li><li>loss 为 0 或 NaN</li><li>有效 token 数极少</li></ul>
+<p>检查：</p>
+<ul><li><code>DATA_PATH</code> 是否正确注入。</li><li>JSONL 每行是否合法 JSON。</li><li>每行是否有 <code>messages</code> 字段。</li><li><code>messages</code> 是否符合 Qwen chat template 需要的 role/content 格式。</li><li>assistant 内容是否为空。</li></ul>
+<h3 id="checkpoint-加载失败"><span>checkpoint 加载失败</span></h3>
+<p>现象：</p>
+<ul><li>shape mismatch</li><li>missing key / unexpected key</li><li>distributed checkpoint metadata 错误</li><li>mrope/rope 相关参数不一致</li></ul>
+<p>检查：</p>
+<ul><li><code>MODEL_PATH</code> 和 <code>LOAD_PATH</code> 是否对应同一个模型版本。</li><li><code>position_embedding_type=mrope</code> 和 <code>mrope_section=11 11 10</code> 是否与转换一致。</li><li>MoE expert 数、router 参数是否一致。</li><li>checkpoint 转换时的 TP/PP/EP 与本次训练是否被框架支持重分片。</li><li><code>REF_LOAD</code> 和 <code>LOAD_PATH</code> 是否都存在且目录完整。</li></ul>
+<h3 id="oom"><span>OOM</span></h3>
+<p>优先尝试：</p>
+<ol><li>降低 <code>max_tokens_per_gpu</code>，比如 32768 -&gt; 28672 或 24576。</li><li>保持/开启 <code>recompute_granularity=full</code>。</li><li>确认 <code>micro_batch_size=1</code> 真生效。</li><li>降低 <code>global_batch_tokens</code>，减少每 step 总 token。</li><li>增大 CP，例如 CP=8，本地 token 从 32768 降到 16384。</li><li>开启 optimizer CPU offload，但这会变慢；B200 192GB 场景一般不优先。</li><li>检查是否保存 optimizer 或额外 reference actor 占显存。</li></ol>
+<h3 id="loss-nan-或爆炸"><span>loss NaN 或爆炸</span></h3>
+<p>优先尝试：</p>
+<ol><li>关闭 FP8 做 BF16 对照。</li><li>降低 <code>max_lr</code>，例如 <code>2e-5 -&gt; 1e-5</code>。</li><li>增加 warmup step。</li><li>检查数据里是否有超长、乱码、异常空样本。</li><li>检查 loss mask 是否错误地训练了 user/system 或 padding。</li><li>检查是否有 gradient clipping 参数；主脚本没直接看到，可能在 <code>MODEL_ARGS</code>。</li></ol>
+<h3 id="loss-不动"><span>loss 不动</span></h3>
+<p>可能原因：</p>
+<ul><li>input_key 错，读到的数据不是 messages。</li><li>loss mask 把 assistant token 全 mask 掉。</li><li>学习率过早衰减到 <code>min_lr</code>。</li><li>实际没有加载到要训练的参数。</li><li>数据重复或质量太差。</li><li>只看 step loss 噪声太大，需要看移动平均。</li></ul>
+<h3 id="吞吐低"><span>吞吐低</span></h3>
+<p>可能原因：</p>
+<ul><li>首步编译/autotune，等几步再判断。</li><li>packing 浪费严重，padding 到 4096 导致有效 token 比例低。</li><li><code>max_tokens_per_gpu</code> 太低。</li><li>CP/EP 通信瓶颈。</li><li>checkpoint 保存太频繁，<code>save_interval=8</code> 会有明显 I/O 周期。</li><li>数据读取/tokenize 成瓶颈。</li><li>Ray worker 没全部起来。</li></ul>
+<h3 id="ray-nccl-网络问题"><span>Ray/NCCL 网络问题</span></h3>
+<p>脚本已经打印很多网络诊断：</p>
+<ul><li><code>MASTER_ADDR</code></li><li><code>MASTER_PORT</code></li><li><code>NODE_IP</code></li><li><code>NCCL_SOCKET_IFNAME</code></li><li><code>ray status</code></li><li>TCP probe</li></ul>
+<p>如果多机卡住，先看：</p>
+<ul><li>所有 worker 是否 join。</li><li><code>MASTER_POD_IP</code> 是否正确。</li><li><code>no_proxy</code> 是否包含 master/node IP。</li><li>NCCL 网卡是否选错。</li><li>端口 6379/8265 是否被挡。</li></ul>
+<h2 id="22-这份配置里值得特别注意的点"><span class="section-index">22</span><span>22. 这份配置里值得特别注意的点</span></h2>
+<ol><li>脚本开头 echo 仍写着 <code>PP=2 + CP=8</code>，但 YAML 实际是 <code>PP=1 + CP=4</code>。以最终环境变量和日志为准。</li></ol>
+<ol><li><code>max_tokens_per_gpu=32768</code> 与 <code>seq_len=131072, CP=4</code> 匹配，这是合理的。</li></ol>
+<ol><li><code>load_path</code> 名字里是 <code>tp2_pp1_cp1_ep8</code>，训练是 <code>tp1_pp1_cp4_ep8</code>。如果 checkpoint 格式支持重分片，这是可以的；否则会加载失败。必须看 load 日志确认。</li></ol>
+<ol><li><code>save_optimizer=false</code> 明确会变成 <code>--no-save-optim</code>。但 <code>save_rng=0</code> 在主脚本里没有看到明确变成 <code>--no-save-rng</code>，建议确认。</li></ol>
+<ol><li><code>train_iters=130</code> 在主脚本里没有直接看到传参，可能在 sourced <code>MODEL_ARGS</code> 或框架层。建议看最终命令确认。</li></ol>
+<ol><li><code>tensorboard_path</code> 在主脚本里没有直接看到传参。若你期待 TensorBoard 曲线，要确认日志中是否真的初始化了 TensorBoard writer。</li></ol>
+<ol><li><code>save_interval=8</code> 对 130 step 的任务来说保存很频繁。优点是中间产物多、方便回滚；缺点是 I/O 开销明显，尤其大模型分布式 checkpoint。</li></ol>
+<ol><li><code>use_fp8=true + recompute full + CP=4</code> 是偏省显存配置；如果稳定性有问题，第一优先关闭 FP8 做对照。</li></ol>
+<h2 id="23-新人跑这类任务的检查清单"><span class="section-index">23</span><span>23. 新人跑这类任务的检查清单</span></h2>
+<p>开跑前：</p>
+<ul><li>确认 JSONL 能抽样解析。</li><li>确认每行有 <code>messages</code>。</li><li>用同一 tokenizer 统计 token 数，估算 <code>train_iters</code>。</li><li>确认 <code>MODEL_PATH</code> 是 HF 原始模型。</li><li>确认 <code>LOAD_PATH</code> 是 Megatron distributed checkpoint。</li><li>确认 <code>REF_LOAD</code> 和 <code>LOAD_PATH</code> 首训时一致。</li><li>确认 checkpoint 转换支持 mrope 和 MoE。</li><li>确认最终日志里的 TP/PP/CP/EP/DP 与预期一致。</li></ul>
+<p>开跑后前 5 step：</p>
+<ul><li>看 Ray 是否正常。</li><li>看 checkpoint load 是否 clean。</li><li>看首步是否只是编译慢，不要过早杀。</li><li>看 GPU 显存是否接近上限。</li><li>看 loss 是否有限。</li><li>看实际 LR 是否按 warmup/cosine 变化。</li><li>看有效 token 数、tgs、tflops 是否合理。</li></ul>
+<p>跑完后：</p>
+<ul><li>检查 <code>save_path</code> 是否有 step 128 或 final checkpoint。</li><li>检查是否保存了 optimizer/RNG，确认它是否符合你的 resume 预期。</li><li>抽取最终 checkpoint 做一次加载或小推理 smoke test。</li><li>对比 base model 和 SFT model 在几条固定 prompt 上的输出差异。</li></ul>
+<h2 id="参考资料"><span class="section-index">24</span><span>参考资料</span></h2>
+<ul><li>NVIDIA Megatron Bridge Parallelisms Guide: <a href="https://docs.nvidia.com/nemo/megatron-bridge/latest/parallelisms.html" target="_blank" rel="noreferrer">https://docs.nvidia.com/nemo/megatron-bridge/latest/parallelisms.html</a></li><li>NVIDIA Megatron Bridge Checkpointing: <a href="https://docs.nvidia.com/nemo/megatron-bridge/0.3.0/training/checkpointing.html" target="_blank" rel="noreferrer">https://docs.nvidia.com/nemo/megatron-bridge/0.3.0/training/checkpointing.html</a></li><li>NVIDIA Megatron Bridge HF/Megatron conversion technical details: <a href="https://docs.nvidia.com/nemo/megatron-bridge/latest/bridge-tech-details.html" target="_blank" rel="noreferrer">https://docs.nvidia.com/nemo/megatron-bridge/latest/bridge-tech-details.html</a></li></ul>
+      </article>
+    </section>
+
+    <aside class="right-rail" aria-label="关键参数侧栏">
+      <section class="rail-card">
+        <div class="rail-title">Run Sheet</div>
+        <div class="param-list">
+          <div class="param"><span>模型</span><b>Qwen3.6 35B A3B</b></div>
+          <div class="param"><span>数据入口</span><b>input_key=messages</b></div>
+          <div class="param"><span>micro batch</span><b>1</b></div>
+          <div class="param"><span>rollout batch</span><b>1024</b></div>
+          <div class="param"><span>max tokens/GPU</span><b>32768</b></div>
+          <div class="param"><span>学习率</span><b>2e-5 → 2e-6</b></div>
+          <div class="param"><span>FP8</span><b>e4m3 / mxfp8</b></div>
+        </div>
+      </section>
+
+      <section class="rail-card">
+        <div class="rail-title">8 GPU Topology</div>
+        <div class="topology" aria-label="GPU 拓扑示意">
+          <div class="node">GPU0<br>EP</div>
+          <div class="node">GPU1<br>EP</div>
+          <div class="node">GPU2<br>EP</div>
+          <div class="node">GPU3<br>EP</div>
+          <div class="node">GPU4<br>EP</div>
+          <div class="node">GPU5<br>EP</div>
+          <div class="node">GPU6<br>EP</div>
+          <div class="node">GPU7<br>EP</div>
+        </div>
+        <div class="legend">
+          <span><i style="background:#f7f6ed"></i>TP=1 / PP=1：dense 层不切</span>
+          <span><i style="background:#dff0ee"></i>CP=4：128K 上下文切成约 32K 本地片段</span>
+          <span><i style="background:#f8e5dc"></i>EP=8：MoE experts 跨 8 卡分布</span>
+        </div>
+      </section>
+
+      <section class="rail-card">
+        <div class="rail-title">Watch First</div>
+        <ul class="risk-list">
+          <li>脚本提示残留 PP=2 / CP=8；实际以 YAML 注入和最终命令为准。</li>
+          <li>load checkpoint 名称是 tp2/cp1，本次训练是 tp1/cp4，要确认重分片加载成功。</li>
+          <li>save_rng=0 在主脚本里未见明确映射，需查实际 checkpoint 内容。</li>
+          <li>FP8 若导致 NaN，先关 FP8 做 BF16 对照，再调学习率。</li>
+        </ul>
+      </section>
+
+      <p class="footer-note">页面由本地 Markdown 生成。保留原文细节，额外加了导航、速览、视觉拓扑和代码复制，方便长文回看。</p>
+    </aside>
+  </main>
+
+  <script>
+    const progress = document.getElementById("progress");
+    const tocLinks = [...document.querySelectorAll(".toc-link")];
+    const headings = tocLinks
+      .map((link) => document.getElementById(decodeURIComponent(link.getAttribute("href").slice(1))))
+      .filter(Boolean);
+
+    function updateProgress() {
+      const scrollTop = window.scrollY || document.documentElement.scrollTop;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      progress.style.transform = "scaleX(" + (max > 0 ? scrollTop / max : 0) + ")";
+    }
+
+    window.addEventListener("scroll", updateProgress, { passive: true });
+    updateProgress();
+
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+      if (!visible) return;
+      tocLinks.forEach((link) => {
+        link.classList.toggle("active", link.getAttribute("href") === "#" + visible.target.id);
+      });
+    }, { rootMargin: "-10% 0px -78% 0px", threshold: [0, 1] });
+
+    headings.forEach((heading) => observer.observe(heading));
+
+    document.querySelectorAll(".copy-code").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const code = button.closest(".code-shell").querySelector("code").innerText;
+        try {
+          await navigator.clipboard.writeText(code);
+          button.textContent = "Copied";
+          setTimeout(() => (button.textContent = "Copy"), 1200);
+        } catch {
+          button.textContent = "Select";
+          setTimeout(() => (button.textContent = "Copy"), 1200);
+        }
+      });
+    });
+  </script>
+</body>
+</html>
