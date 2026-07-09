@@ -1,0 +1,1285 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <link rel="icon" href="data:,">
+  <title>CompactionRL 中文深读：把上下文压缩纳入信用分配</title>
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [["\\(", "\\)"]],
+        displayMath: [["\\[", "\\]"]],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"]
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    :root {
+      --field: #f3efe5;
+      --paper: #fffaf0;
+      --paper-2: #f8f0df;
+      --ink: #171916;
+      --muted: #626358;
+      --soft: #868172;
+      --line: #d6cdbc;
+      --line-strong: #938773;
+      --green: #194d41;
+      --green-2: #2f7668;
+      --ochre: #b86d28;
+      --coral: #c64d34;
+      --red: #9c3028;
+      --blue: #315f78;
+      --code: #ece5d4;
+      --shadow: 0 22px 60px rgba(35, 31, 23, 0.12);
+      --serif: "Source Han Serif SC", "Noto Serif SC", "Songti SC", "STSong", SimSun, Georgia, serif;
+      --sans: "Avenir Next", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --mono: "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(115deg, transparent 0 46px, rgba(25, 77, 65, 0.075) 47px, transparent 48px) 0 0 / 86px 86px,
+        linear-gradient(0deg, rgba(23, 25, 22, 0.035) 1px, transparent 1px) 0 0 / 100% 34px,
+        var(--field);
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.85;
+      letter-spacing: 0;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        radial-gradient(rgba(23, 25, 22, 0.18) 0.7px, transparent 0.7px);
+      background-size: 7px 7px;
+      opacity: 0.18;
+      mix-blend-mode: multiply;
+      z-index: 1;
+    }
+
+    a {
+      color: var(--green);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 0.18em;
+    }
+
+    mark {
+      background: linear-gradient(transparent 54%, rgba(184, 109, 40, 0.24) 54%);
+      color: inherit;
+      padding: 0 0.1em;
+    }
+
+    .progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 4px;
+      width: 0;
+      background: linear-gradient(90deg, var(--green), var(--ochre), var(--coral));
+      z-index: 20;
+    }
+
+    .page {
+      position: relative;
+      z-index: 2;
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 38px 0 110px;
+    }
+
+    .hero {
+      min-height: calc(100vh - 76px);
+      display: grid;
+      grid-template-columns: minmax(0, 0.95fr) minmax(360px, 0.72fr);
+      gap: 34px;
+      align-items: stretch;
+      padding: 18px 0 28px;
+    }
+
+    .hero-copy,
+    .hero-visual,
+    .dossier,
+    .section,
+    .panel,
+    .table-wrap,
+    .figure,
+    .equation,
+    .qa-row {
+      background: color-mix(in srgb, var(--paper) 94%, white 6%);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .hero-copy {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: clamp(26px, 4vw, 54px);
+      border-top: 8px solid var(--green);
+    }
+
+    .eyebrow,
+    .kicker,
+    .module-label,
+    .small-label,
+    .toc-num {
+      color: var(--green);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    .quote,
+    .metric-value {
+      font-family: var(--serif);
+      letter-spacing: 0;
+    }
+
+    h1 {
+      max-width: 820px;
+      margin: 24px 0 22px;
+      font-size: clamp(42px, 6.5vw, 78px);
+      line-height: 1.05;
+      font-weight: 900;
+    }
+
+    .subtitle {
+      max-width: 760px;
+      margin: 0;
+      color: #3d4039;
+      font-size: clamp(19px, 2vw, 25px);
+      line-height: 1.72;
+      font-weight: 650;
+    }
+
+    .byline {
+      margin: 26px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 750;
+    }
+
+    .route-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 34px;
+    }
+
+    .route-item {
+      min-height: 116px;
+      padding: 16px 15px 14px;
+      background: var(--paper-2);
+      border: 1px solid var(--line);
+    }
+
+    .route-item b {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--green);
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+    }
+
+    .route-item span {
+      color: #383a34;
+      font-size: 14px;
+      line-height: 1.58;
+      font-weight: 720;
+    }
+
+    .hero-visual {
+      display: grid;
+      grid-template-rows: minmax(240px, 1fr) auto;
+      overflow: hidden;
+      background: #fdf8ec;
+    }
+
+    .visual-stack {
+      display: grid;
+      align-content: center;
+      gap: 14px;
+      padding: 20px;
+    }
+
+    .hero-visual img {
+      width: 100%;
+      height: auto;
+      display: block;
+      border: 1px solid var(--line);
+      background: white;
+    }
+
+    .visual-caption {
+      padding: 18px 20px 20px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.62;
+    }
+
+    .metric-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-top: 22px;
+      border: 1px solid var(--line-strong);
+      background: #171916;
+      color: var(--paper);
+    }
+
+    .metric {
+      padding: 16px 15px 15px;
+      border-right: 1px solid rgba(255, 250, 240, 0.22);
+    }
+
+    .metric:last-child {
+      border-right: 0;
+    }
+
+    .metric-value {
+      display: block;
+      color: #f1c079;
+      font-size: clamp(23px, 2.4vw, 34px);
+      line-height: 1.08;
+      font-weight: 900;
+    }
+
+    .metric-label {
+      display: block;
+      margin-top: 8px;
+      color: rgba(255, 250, 240, 0.78);
+      font-size: 12px;
+      line-height: 1.45;
+      font-weight: 720;
+    }
+
+    .toc {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin: 0 0 40px;
+      padding: 12px 0;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--field) 88%, white 12%);
+      backdrop-filter: blur(10px);
+    }
+
+    .toc a {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 38px;
+      padding: 7px 12px;
+      color: #33352f;
+      border: 1px solid transparent;
+      text-decoration: none;
+      font-size: 13px;
+      line-height: 1.2;
+      font-weight: 780;
+    }
+
+    .toc a:hover,
+    .toc a:focus-visible {
+      background: var(--paper);
+      border-color: var(--line);
+      color: var(--green);
+      outline: none;
+    }
+
+    .intro-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 0.8fr) minmax(300px, 0.42fr);
+      gap: 24px;
+      align-items: start;
+      margin-bottom: 42px;
+    }
+
+    .lead-block {
+      padding: 34px;
+      background: #191c18;
+      color: var(--paper);
+      border-left: 8px solid var(--ochre);
+    }
+
+    .lead-block p {
+      max-width: 760px;
+      margin: 0 0 18px;
+      font-size: clamp(18px, 2vw, 23px);
+      line-height: 1.76;
+      font-weight: 680;
+    }
+
+    .lead-block p:last-child {
+      margin-bottom: 0;
+    }
+
+    .thesis-note {
+      padding: 24px 22px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+    }
+
+    .thesis-note p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.72;
+    }
+
+    .dossier {
+      margin: 0 0 58px;
+      padding: 26px;
+      box-shadow: none;
+    }
+
+    .dossier-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 0.54fr);
+      gap: 22px;
+      align-items: start;
+    }
+
+    .dossier h2,
+    .section h2 {
+      margin: 8px 0 18px;
+      font-size: clamp(30px, 4vw, 48px);
+      line-height: 1.18;
+      font-weight: 900;
+    }
+
+    .dossier p,
+    .section p {
+      margin: 0 0 20px;
+    }
+
+    .meta-list {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .meta-list li {
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px dashed var(--line);
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.56;
+    }
+
+    .meta-list b {
+      color: var(--ink);
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .section {
+      margin: 0 0 46px;
+      padding: clamp(24px, 4vw, 42px);
+      scroll-margin-top: 90px;
+      box-shadow: none;
+    }
+
+    .section:nth-of-type(odd) {
+      background: color-mix(in srgb, var(--paper) 92%, #e7f0e9 8%);
+    }
+
+    .section-inner {
+      display: grid;
+      grid-template-columns: minmax(0, 0.72fr) minmax(280px, 0.28fr);
+      gap: 28px;
+      align-items: start;
+    }
+
+    .section-main {
+      min-width: 0;
+    }
+
+    .rail {
+      position: sticky;
+      top: 84px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .rail-box {
+      padding: 16px;
+      background: var(--paper-2);
+      border: 1px solid var(--line);
+    }
+
+    .rail-box p {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.58;
+    }
+
+    h3 {
+      margin: 34px 0 12px;
+      font-size: 22px;
+      line-height: 1.38;
+      font-weight: 900;
+    }
+
+    .quote {
+      margin: 26px 0 30px;
+      padding: 7px 0 7px 22px;
+      border-left: 5px solid var(--coral);
+      color: #1d201b;
+      font-size: clamp(22px, 2.4vw, 31px);
+      line-height: 1.52;
+      font-weight: 900;
+    }
+
+    .callout {
+      margin: 26px 0 30px;
+      padding: 20px 22px;
+      background: #1b211d;
+      color: #fff6e6;
+      border-left: 6px solid var(--ochre);
+    }
+
+    .callout b {
+      display: block;
+      margin-bottom: 8px;
+      color: #f2c37d;
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .panel {
+      margin: 26px 0 30px;
+      padding: 22px;
+      box-shadow: none;
+    }
+
+    .panel-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin: 24px 0 30px;
+    }
+
+    .mini-panel {
+      min-height: 158px;
+      padding: 18px;
+      background: var(--paper-2);
+      border: 1px solid var(--line);
+    }
+
+    .mini-panel h3 {
+      margin: 8px 0 9px;
+      font-size: 18px;
+    }
+
+    .mini-panel p {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.66;
+    }
+
+    .method-steps {
+      counter-reset: step;
+      display: grid;
+      gap: 12px;
+      margin: 26px 0 30px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .method-steps li {
+      counter-increment: step;
+      display: grid;
+      grid-template-columns: 44px 1fr;
+      gap: 14px;
+      padding: 16px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .method-steps li::before {
+      content: counter(step, decimal-leading-zero);
+      display: grid;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      border: 2px solid var(--green);
+      color: var(--green);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .method-steps b {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .method-steps span {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.64;
+    }
+
+    .equation {
+      margin: 26px 0 30px;
+      overflow: hidden;
+      box-shadow: none;
+    }
+
+    .equation-title {
+      padding: 13px 17px;
+      background: var(--green);
+      color: var(--paper);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 850;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .equation-body {
+      overflow-x: auto;
+      padding: 22px 18px;
+      background: var(--code);
+    }
+
+    .equation-body mjx-container[display="true"] {
+      margin: 0 !important;
+      text-align: left !important;
+    }
+
+    .equation-explain {
+      padding: 16px 18px 18px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.68;
+      border-top: 1px solid var(--line);
+    }
+
+    .figure {
+      margin: 30px 0 36px;
+      padding: 16px;
+      box-shadow: none;
+    }
+
+    .figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: white;
+      border: 1px solid var(--line);
+    }
+
+    .figure-pair,
+    .figure-triptych {
+      display: grid;
+      gap: 14px;
+      margin: 30px 0 36px;
+    }
+
+    .figure-pair {
+      grid-template-columns: minmax(0, 0.72fr) minmax(0, 1fr);
+    }
+
+    .figure-triptych {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .figure-panel {
+      padding: 12px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+    }
+
+    .figure-panel img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: white;
+      border: 1px solid var(--line);
+    }
+
+    .caption {
+      margin: 12px 2px 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.62;
+    }
+
+    .caption b {
+      color: var(--red);
+    }
+
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      margin: 26px 0 30px;
+      box-shadow: none;
+    }
+
+    table {
+      width: 100%;
+      min-width: 760px;
+      border-collapse: collapse;
+      background: var(--paper);
+    }
+
+    th,
+    td {
+      padding: 13px 14px;
+      border: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    th {
+      background: #203b34;
+      color: #fff8e8;
+      font-weight: 850;
+    }
+
+    tr.highlight td {
+      background: #e9f0df;
+      font-weight: 780;
+    }
+
+    .table-note {
+      margin-top: -18px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.62;
+    }
+
+    .evidence-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 18px 0 24px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 5px 9px;
+      background: #edf2df;
+      border: 1px solid var(--line);
+      color: #314338;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 780;
+      line-height: 1.1;
+    }
+
+    .tag.warn {
+      background: #f5e3d8;
+      color: #7d3325;
+    }
+
+    .tag.blue {
+      background: #e4eef0;
+      color: #244c5f;
+    }
+
+    .qa {
+      display: grid;
+      gap: 12px;
+      margin: 26px 0 30px;
+    }
+
+    .qa-row {
+      display: grid;
+      grid-template-columns: minmax(170px, 0.3fr) 1fr;
+      gap: 18px;
+      padding: 18px;
+      box-shadow: none;
+    }
+
+    .qa-row b {
+      color: var(--green);
+    }
+
+    .qa-row p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.66;
+    }
+
+    .footer-note {
+      margin-top: 48px;
+      padding: 28px;
+      background: #171916;
+      color: #fff7e8;
+    }
+
+    .footer-note h2 {
+      margin: 0 0 12px;
+      font-size: clamp(28px, 3.6vw, 44px);
+    }
+
+    .footer-note p {
+      max-width: 860px;
+      margin: 0 0 14px;
+      color: rgba(255, 247, 232, 0.8);
+    }
+
+    .footer-note a {
+      color: #f3c47e;
+    }
+
+    @media (max-width: 960px) {
+      .hero,
+      .intro-grid,
+      .dossier-grid,
+      .section-inner,
+      .figure-pair {
+        grid-template-columns: 1fr;
+      }
+
+      .hero {
+        min-height: auto;
+      }
+
+      .rail {
+        position: static;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .panel-grid,
+      .figure-triptych,
+      .metric-strip,
+      .route-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 680px) {
+      body {
+        font-size: 16px;
+        background-size: 70px 70px, 100% 30px, auto;
+      }
+
+      .page {
+        width: min(100% - 24px, 1180px);
+        padding-top: 16px;
+      }
+
+      .hero-copy,
+      .section,
+      .dossier,
+      .lead-block {
+        padding: 20px;
+      }
+
+      .toc {
+        position: static;
+      }
+
+      .metric-strip,
+      .route-grid,
+      .panel-grid,
+      .figure-triptych,
+      .rail,
+      .qa-row {
+        grid-template-columns: 1fr;
+      }
+
+      .metric {
+        border-right: 0;
+        border-bottom: 1px solid rgba(255, 250, 240, 0.22);
+      }
+
+      .metric:last-child {
+        border-bottom: 0;
+      }
+
+      .meta-list li {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+
+      table {
+        min-width: 680px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="progress" id="progress"></div>
+  <article class="page">
+    <header class="hero" id="top">
+      <section class="hero-copy" aria-label="报告标题">
+        <div>
+          <div class="eyebrow">SINGLE PAPER DEEP DIVE · ARXIV:2607.05378V1 · 2026-07-06</div>
+          <h1>压缩不是省 token，而是把摘要纳入信用分配</h1>
+          <p class="subtitle">CompactionRL 把长程智能体的上下文压缩从推理期技巧改造成 RL 训练对象：摘要 token 与执行 token 共用任务奖励，再用 token-level loss 和跨分段 GAE 修正压缩带来的训练偏差。</p>
+          <p class="byline">中文深读与前端排版 · 基于 Yujiang Li, Zhenyu Hou, Yi Jing, Jie Tang, Yuxiao Dong 的 arXiv v1 论文</p>
+        </div>
+        <div>
+          <div class="route-grid" aria-label="阅读路线">
+            <div class="route-item">
+              <b>Route</b>
+              <span>单篇深读：问题 → 方法剖面 → 公式 → 证据 → 边界。</span>
+            </div>
+            <div class="route-item">
+              <b>Spine</b>
+              <span>机制剖面：为什么上下文压缩会改变 RL 数据结构。</span>
+            </div>
+            <div class="route-item">
+              <b>Reader</b>
+              <span>面向关心长程 agent、RLVR/PPO、coding agent 训练的技术读者。</span>
+            </div>
+          </div>
+          <div class="metric-strip" aria-label="论文关键数字">
+            <div class="metric">
+              <span class="metric-value">64k/80k</span>
+              <span class="metric-label">训练峰值上下文预算</span>
+            </div>
+            <div class="metric">
+              <span class="metric-value">×4</span>
+              <span class="metric-label">compacted evaluation 有效预算</span>
+            </div>
+            <div class="metric">
+              <span class="metric-value">+7.0</span>
+              <span class="metric-label">106B 在 SWE-bench Verified compacted 下相对 base 的绝对点增益</span>
+            </div>
+            <div class="metric">
+              <span class="metric-value">3</span>
+              <span class="metric-label">每条 trajectory 最多 compaction 次数</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="hero-visual" aria-label="论文图示">
+        <div class="visual-stack">
+          <img src="images/headv3.png" alt="论文 Figure 1 左侧：有无上下文压缩的执行流程对比">
+          <img src="images/controlled_eval_terminus_kira_reproduction.png" alt="论文 Figure 1 右侧：CompactionRL 在两个 benchmark 上的结果增益">
+        </div>
+        <p class="visual-caption"><b>图 1 来源：</b>论文 Figure 1。左图说明固定窗口耗尽时，compaction 将早期轨迹压成 summary 并开启新 trace；右图给出 30B 和 106B 模型在 SWE-bench Verified 与 Terminal-Bench 2.0 的 compacted evaluation 增益。第一屏先放这张图，是因为它同时回答“为什么需要读”和“读完能理解什么”。</p>
+      </aside>
+    </header>
+
+    <nav class="toc" aria-label="章节导航">
+      <a href="#why"><span class="toc-num">01</span>为什么读</a>
+      <a href="#dossier"><span class="toc-num">02</span>论文档案</a>
+      <a href="#mechanism"><span class="toc-num">03</span>方法机制</a>
+      <a href="#objective"><span class="toc-num">04</span>公式与目标</a>
+      <a href="#evidence"><span class="toc-num">05</span>实验证据</a>
+      <a href="#behavior"><span class="toc-num">06</span>行为分析</a>
+      <a href="#limits"><span class="toc-num">07</span>边界问题</a>
+    </nav>
+
+    <section class="intro-grid" id="why">
+      <div class="lead-block">
+        <p>长程 agent 的难点不只是“上下文放不下”，而是 <mark>一旦历史被摘要替换，后续所有动作都被迫相信这份摘要</mark>。如果 RL 只奖励最后任务成功，却没有训练摘要本身，压缩就会成为训练管线外的一段脆弱手工逻辑。</p>
+        <p>CompactionRL 的判断是：摘要不是日志归档，而是一类会影响最终 reward 的 policy action。于是摘要 token 和执行 token 被放进同一个 PPO 训练问题里，论文再处理两个随之出现的偏差：分段数量/长度造成的 loss 权重偏差，以及 terminal reward 被错误拉近的信用分配偏差。</p>
+      </div>
+      <aside class="thesis-note">
+        <div class="small-label">THESIS</div>
+        <p>我的读法：这篇论文最值得看的不是“模型学会写更长摘要”，而是它把上下文管理从 prompt engineering 移到 RL 轨迹结构内部。它真正讨论的是：当一个 rollout 被 summary 切成多段之后，PPO 的样本、token 权重和 GAE 距离应该如何重新定义。</p>
+      </aside>
+    </section>
+
+    <section class="dossier" id="dossier" aria-label="论文档案">
+      <div class="dossier-grid">
+        <div>
+          <div class="kicker">SOURCE DOSSIER</div>
+          <h2>阅读对象：一篇把 compaction 训练化的长程 agent RL 论文</h2>
+          <p>论文声称，CompactionRL 在固定峰值上下文预算下，让开源 GLM 系列模型在 coding-agent 任务的 compacted inference 中获得一致增益。这里要谨慎读：它不是证明“压缩永远优于长上下文”，而是在同一 agent scaffold 和同一 compacted setting 下展示训练摘要与执行的收益。</p>
+        </div>
+        <ul class="meta-list">
+          <li><b>Title</b><span>CompactionRL: Reinforcement Learning with Context Compaction for Long-Horizon Agents</span></li>
+          <li><b>Authors</b><span>Yujiang Li, Zhenyu Hou, Yi Jing, Jie Tang, Yuxiao Dong</span></li>
+          <li><b>Version</b><span>arXiv:2607.05378v1, submitted 2026-07-06 17:55:12Z</span></li>
+          <li><b>Institution</b><span>Tsinghua University；论文脚注说明前三位作者相关工作发生在 Z.AI 实习期间</span></li>
+          <li><b>Source</b><span><a href="https://arxiv.org/abs/2607.05378v1" target="_blank" rel="noreferrer">arXiv abstract</a> · <a href="https://arxiv.org/pdf/2607.05378v1" target="_blank" rel="noreferrer">PDF</a></span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section" id="mechanism">
+      <div class="section-inner">
+        <main class="section-main">
+          <div class="kicker">03 · METHOD ANATOMY</div>
+          <h2>CompactionRL 把一次长 rollout 改写成“执行段 + 摘要段”的训练对象</h2>
+          <p>论文的设置很具体：agent 在软件工程、终端任务这类长程交互中不断产生 assistant response 和 environment observation。历史越长，越容易逼近固定 context budget。CompactionRL 不把 summary 当作外部工具，而是在 rollout collection 时由当前 policy 生成 summary，再从 summary 和最近若干轮交互恢复上下文。</p>
+
+          <ol class="method-steps">
+            <li><div><b>原始历史按 assistant-observation 原子步组织。</b><span>论文把 \(z_i=(a_i,o_i)\) 当作不可拆分单元，避免 compaction 把工具调用和工具反馈切开。</span></div></li>
+            <li><div><b>预算不足时触发 summary。</b><span>当剩余 context budget 小于 \(T_{\mathrm{comp}}\) 时，policy 在当前历史后追加固定总结指令并采样 summary。</span></div></li>
+            <li><div><b>恢复上下文保留两类信息。</b><span>长程信息靠 summary，最近环境状态靠尾部 \(k\) 个原子步。论文默认 \(k=2\)，必要时减少以满足预算。</span></div></li>
+            <li><div><b>训练时 summary token 与 execution token 都被优化。</b><span>每条 compacted rollout 拆成若干 segment，但它们共享同一个最终任务 reward，不另造 summary-quality reward。</span></div></li>
+          </ol>
+
+          <figure class="figure">
+            <img src="images/mainv2.png" alt="论文 Figure 2：CompactionRL 方法总览">
+            <figcaption class="caption"><b>图 2（论文 Figure 2）</b>把机制讲得最清楚：当上下文接近阈值，policy 先写 summary，再从 summary 与 recent turns 恢复执行；训练端则把所有 execution/summary segments 放在同一个最终 reward 下，并用跨分段 GAE 修正早期 segment 的 reward 距离。</figcaption>
+          </figure>
+
+          <div class="callout">
+            <b>Design tension</b>
+            压缩让 rollout 继续变长，但也让一个任务样本变成可变数量的训练 segment。论文选择 PPO 而不是 GRPO 式 group-wise normalization，正是因为固定组大小的假设在 compaction 后会变得别扭。
+          </div>
+        </main>
+        <aside class="rail">
+          <div class="rail-box">
+            <div class="module-label">Paper-backed</div>
+            <p>机制来自 Section 4.1 与 Figure 2：summary 由同一 trainable policy 生成，final task reward 分配给同一 rollout 的全部 trainable segments。</p>
+          </div>
+          <div class="rail-box">
+            <div class="module-label">Caveat</div>
+            <p>论文没有把完整总结 prompt、环境实现细节和所有失败案例展开，因此复现仍需要源码/训练管线级信息。</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="section" id="objective">
+      <div class="section-inner">
+        <main class="section-main">
+          <div class="kicker">04 · OBJECTIVE</div>
+          <h2>公式要解决两件事：别让长短 segment 改变权重，别把远处 reward 看近了</h2>
+          <p>CompactionRL 的公式部分可以分成三层。第一层定义何时压缩与如何恢复；第二层把 PPO loss 写到 token 粒度；第三层用跨轨迹位置校正，让早期 segment 的 advantage 不会因为“每段独立训练”而错误地靠近终点奖励。</p>
+
+          <div class="equation">
+            <div class="equation-title">Context compaction trigger and resume</div>
+            <div class="equation-body">
+              \[
+              h_t=(s,u,z_1,\ldots,z_t), \quad z_i=(a_i,o_i)
+              \]
+              \[
+              C-|h_t| < T_{\mathrm{comp}}, \quad
+              S_t \sim \pi_\theta(\cdot \mid h_t \oplus q_{\mathrm{sum}})
+              \]
+              \[
+              \bar{h}_t=(s)\oplus u_{\mathrm{resume}}(S_t)\oplus(z_{t-k+1},\ldots,z_t)
+              \]
+            </div>
+            <div class="equation-explain">这里 \(C\) 是峰值 context budget，\(T_{\mathrm{comp}}\) 是触发阈值，\(S_t\) 是 policy 生成的 summary。论文的关键设计是：恢复上下文不是只用 summary，而是 summary 加最近 \(k\) 个 assistant-observation 原子步。</div>
+          </div>
+
+          <div class="equation">
+            <div class="equation-title">Token-level PPO objective</div>
+            <div class="equation-body">
+              \[
+              \rho_{s,i}(\theta)=
+              \frac{\pi_\theta(y_{s,i}\mid x_{s,i})}
+              {\pi_{\theta_{\mathrm{old}}}(y_{s,i}\mid x_{s,i})}
+              \]
+              \[
+              \mathcal{L}_{\pi}=
+              -\frac{1}{|\mathcal{M}|}
+              \sum_{(s,i)\in\mathcal{M}}
+              \min\left(
+              \rho_{s,i}(\theta)\widehat{A}_{s,i},
+              \mathrm{clip}(\rho_{s,i}(\theta),1-\epsilon,1+\epsilon)\widehat{A}_{s,i}
+              \right)
+              \]
+            </div>
+            <div class="equation-explain">论文把平均单位放在 optimized assistant-token set \(\mathcal{M}\) 上，而不是 sequence 或 segment 上。我的理解是，这一项在防止“更容易触发 compaction 的任务，因为 segment 更多而在训练中更吵”。</div>
+          </div>
+
+          <div class="equation">
+            <div class="equation-title">Cross-trajectory GAE correction</div>
+            <div class="equation-body">
+              \[
+              A^{\mathrm{loc}}_{s,i}=
+              \sum_{\ell=0}^{n_s-i}(\gamma\lambda)^\ell\delta_{s,i+\ell},
+              \quad
+              \delta_{s,i}=r_{s,i}+\gamma V_\phi(x_{s,i+1})-V_\phi(x_{s,i})
+              \]
+              \[
+              N_{>s}=\sum_{j>s} n_j,\quad
+              \widehat{A}_{s,i}=(\gamma\lambda)^{N_{>s}}A^{\mathrm{loc}}_{s,i}
+              \]
+            </div>
+            <div class="equation-explain">如果每个 segment 独立计算 GAE，terminal reward 会像是出现在每段末尾，早期 summary 被过度奖励。乘上 \((\gamma\lambda)^{N_{>s}}\) 等于告诉训练：这个 token 到最终 outcome 之间还隔着后续 segment 的 optimized tokens。</div>
+          </div>
+
+          <div class="panel-grid">
+            <div class="mini-panel">
+              <div class="module-label">CLAIM</div>
+              <h3>summary 不是辅助标签</h3>
+              <p>论文没有引入手写 summary quality reward，而是让 summary token 直接受最终任务 reward 影响。</p>
+            </div>
+            <div class="mini-panel">
+              <div class="module-label">WHY PPO</div>
+              <h3>可变 segment 数破坏 group 假设</h3>
+              <p>GRPO 类 group-wise 方法在 segment 数随任务变化时，会遇到重复计权和 segment-level advantage 的问题。</p>
+            </div>
+            <div class="mini-panel">
+              <div class="module-label">LIMIT</div>
+              <h3>GAE 仍是近似</h3>
+              <p>论文限制部分承认 cross-trajectory GAE 不是精确 full-trajectory credit assignment。</p>
+            </div>
+          </div>
+        </main>
+        <aside class="rail">
+          <div class="rail-box">
+            <div class="module-label">Source</div>
+            <p>公式来自 Section 4.1 和 4.2，对应论文式 (6)-(15)。</p>
+          </div>
+          <div class="rail-box">
+            <div class="module-label">Inference</div>
+            <p>“更吵”的说法是我的解释：论文原文表述为 token-level normalization removes segment-count bias。</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="section" id="evidence">
+      <div class="section-inner">
+        <main class="section-main">
+          <div class="kicker">05 · EVIDENCE</div>
+          <h2>实验支持的是“compacted setting 下更可靠”，不是“所有 setting 全赢”</h2>
+          <p>论文实验集中在两个 coding-oriented agent benchmark：SWE-bench Verified 与 Terminal-Bench 2.0。作者使用 Harbor 环境和 Terminus-KIRA agent scaffold，SWE-bench Verified 的作者实验是随机 200 个任务子集，Terminal-Bench 2.0 用完整集合；每个实验报告 2 次 evaluation 的均值。</p>
+
+          <div class="evidence-tags">
+            <span class="tag">Global batch 128</span>
+            <span class="tag">Group size 1</span>
+            <span class="tag">LR policy 2e-6</span>
+            <span class="tag">LR critic 3e-6</span>
+            <span class="tag">Trigger 10,240 tokens</span>
+            <span class="tag blue">At most 3 compactions</span>
+            <span class="tag warn">SWE uses random 200-task subset</span>
+          </div>
+
+          <h3>summary agent 本身会改变任务成功率</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Execution Agent</th>
+                  <th>Summary Agent</th>
+                  <th>SWE-Verified Acc.</th>
+                  <th>Summary Count / Trace</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="highlight"><td>GLM-4.7-Flash</td><td>Qwen3.5-27B</td><td>55.5</td><td>1.010</td></tr>
+                <tr><td>GLM-4.7-Flash</td><td>GLM-4.7-Flash</td><td>50.5</td><td>1.075</td></tr>
+                <tr><td>GLM-4.7-Flash</td><td>Qwen3-30B-A3B</td><td>49.0</td><td>1.126</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="table-note">来源：论文 Table 1。实验只固定 executor、替换 summary agent，就出现 49.0 到 55.5 的差距。这个结果支撑“summary 是任务性能关键变量”，但不能单独说明哪种 summary 内容最优。</p>
+
+          <h3>主结果：同一 scaffold 下，CompactionRL 在 compacted evaluation 最强</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th>Peak Len.</th>
+                  <th>SWE Single ×1</th>
+                  <th>SWE Compacted ×4</th>
+                  <th>Terminal Single ×1</th>
+                  <th>Terminal Compacted ×4</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>GLM-4.7-Flash (30B-A3B)</td><td>64k</td><td>47.5</td><td>50.5</td><td>14.6</td><td>13.4</td></tr>
+                <tr><td>+ RL w/o compaction</td><td>64k</td><td>50.0</td><td>48.0</td><td>16.9</td><td>12.4</td></tr>
+                <tr class="highlight"><td>+ CompactionRL</td><td>64k</td><td>43.7</td><td>56.0</td><td>16.9</td><td>20.2</td></tr>
+                <tr><td>GLM-4.5-Air (106B-A30B)</td><td>80k</td><td>57.8</td><td>59.8</td><td>17.9</td><td>21.4</td></tr>
+                <tr><td>+ RL w/o compaction</td><td>80k</td><td>58.3</td><td>62.5</td><td>20.2</td><td>23.6</td></tr>
+                <tr class="highlight"><td>+ CompactionRL</td><td>80k</td><td>57.3</td><td>66.8</td><td>21.4</td><td>24.5</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="table-note">来源：论文 Table 2，表中只抽取 Terminus-KIRA scaffold 的同系模型行。模式很清楚：CompactionRL 在 compacted ×4 列稳定领先；single ×1 列并非稳定提升，30B 的 SWE single 还下降到 43.7。</p>
+
+          <h3>两个训练修正确实被 ablation 支持</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>System</th>
+                  <th>SWE-bench Verified</th>
+                  <th>Terminal-Bench 2.0</th>
+                  <th>读法</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>GLM-4.5-Air</td><td>59.8</td><td>21.4</td><td>80k×4 compacted baseline</td></tr>
+                <tr class="highlight"><td>+ CompactionRL</td><td>66.8</td><td>24.5</td><td>完整方法最好</td></tr>
+                <tr><td>− w/o token-level loss</td><td>60.0</td><td>21.3</td><td>去掉 token 归一化后几乎回到 baseline</td></tr>
+                <tr><td>− w/o cross-trajectory GAE</td><td>63.0</td><td>22.5</td><td>仍有收益，但明显低于完整方法</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="table-note">来源：论文 Table 4。作者解释为两项都重要，其中 token-level loss normalization 的移除造成更大下降。这个表是 GLM-4.5-Air-SFT 上的 ablation，不能自动外推到所有模型规模和任务域。</p>
+        </main>
+        <aside class="rail">
+          <div class="rail-box">
+            <div class="module-label">Measured</div>
+            <p>Pass@1 accuracy、compacted ×4、single ×1、ablation 去项。主要数值来自论文 Table 1, 2, 4。</p>
+          </div>
+          <div class="rail-box">
+            <div class="module-label">Do not overread</div>
+            <p>公共 baseline 行来自模型卡/报告且 scaffold 可能不同；作者也在表注中提醒 SWE-bench Verified 子集差异。</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="section" id="behavior">
+      <div class="section-inner">
+        <main class="section-main">
+          <div class="kicker">06 · BEHAVIOR</div>
+          <h2>行为图说明：收益不像是单纯“多跑几步”，而是摘要训练让继续执行更稳</h2>
+          <p>论文 Figure 3 观察 GLM-4.5-Air 在 80k×4 compacted evaluation 下的行为。CompactionRL 的 compaction 次数和 tool call 数不是最多，compacted-task accuracy 却最高。作者据此认为，提升不是因为它简单拉长 trace，而是 trained summaries 减少了压缩后重新探索和状态丢失。</p>
+
+          <div class="figure-triptych" aria-label="Figure 3 panels">
+            <figure class="figure-panel">
+              <img src="images/compaction_behavior_newpaths_own_compacted_final_avg_compaction_count.png" alt="平均 compaction 次数">
+              <figcaption class="caption"><b>Fig. 3a</b> 平均 compaction 次数：CompactionRL 少于 base 与 w/o summary，但多于 no-compaction RL。</figcaption>
+            </figure>
+            <figure class="figure-panel">
+              <img src="images/compaction_behavior_newpaths_own_compacted_final_avg_tool_call_counts.png" alt="平均 tool call 次数">
+              <figcaption class="caption"><b>Fig. 3b</b> 平均 tool call：CompactionRL 低于 base 与 w/o summary，提示不是靠更多工具调用硬堆结果。</figcaption>
+            </figure>
+            <figure class="figure-panel">
+              <img src="images/compaction_behavior_newpaths_own_compacted_final_compacted_task_accuracy.png" alt="触发 compaction 任务的准确率">
+              <figcaption class="caption"><b>Fig. 3c</b> compacted-task accuracy：CompactionRL 在触发 compaction 的任务子集上最高。</figcaption>
+            </figure>
+          </div>
+
+          <p>Figure 4 则看训练动态：当 summary response 进入 RL objective，summary length 随训练变长，reasoning tokens per turn 增加，entropy 上升更慢。论文的解释是，模型学会保存更多可继续执行的状态，而不是只写概括性进度。</p>
+
+          <div class="figure-triptych" aria-label="Figure 4 panels">
+            <figure class="figure-panel">
+              <img src="images/rollout_avg_summary_tokens_by_batch.png" alt="summary length training dynamics">
+              <figcaption class="caption"><b>Fig. 4a</b> summary length：完整 CompactionRL 的 summary 越训越长。</figcaption>
+            </figure>
+            <figure class="figure-panel">
+              <img src="images/wandb_reasoning_tokens_by_step.png" alt="reasoning tokens per turn training dynamics">
+              <figcaption class="caption"><b>Fig. 4b</b> reasoning tokens：完整方法训练中保留更多推理预算。</figcaption>
+            </figure>
+            <figure class="figure-panel">
+              <img src="images/training_entropy_by_step.png" alt="policy entropy training dynamics">
+              <figcaption class="caption"><b>Fig. 4c</b> entropy：作者解读为更受控的 policy optimization。</figcaption>
+            </figure>
+          </div>
+
+          <div class="quote">我的综合判断：CompactionRL 的实验最强证据来自“summary train + token-level loss + cross-trajectory GAE”三者同时出现时的 compacted performance，而不是来自单个漂亮曲线。</div>
+        </main>
+        <aside class="rail">
+          <div class="rail-box">
+            <div class="module-label">Synthesis</div>
+            <p>行为图与 ablation 互相补强：summary 训练让 compacted state 更有用，优化修正让这些 summary token 得到较合理的训练权重与信用距离。</p>
+          </div>
+          <div class="rail-box">
+            <div class="module-label">Unproven</div>
+            <p>论文没有证明更长 summary 本身总是更好；它只显示在该训练和 benchmark 设置中，summary length 增长伴随更好的 compacted behavior。</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="section" id="limits">
+      <div class="section-inner">
+        <main class="section-main">
+          <div class="kicker">07 · LIMITS AND OPEN QUESTIONS</div>
+          <h2>真正的边界：它训练的是 compaction-enabled agent，不是通用 single-window 增强器</h2>
+          <p>论文自己的 limitations 很直接：CompactionRL 针对启用 compaction 的执行方式训练，关闭 compaction 后 gains 不稳定。这不是小脚注，而是决定部署方式的前提。若生产环境不允许 test-time compaction，这套方法可能不会自然迁移。</p>
+
+          <div class="qa">
+            <div class="qa-row">
+              <b>哪些结论是 paper-backed？</b>
+              <p>CompactionRL 在论文设置的 compacted evaluation 下提高 SWE-bench Verified 与 Terminal-Bench 2.0 Pass@1；summary agent 的选择会影响任务成功；去掉 token-level loss 或 cross-trajectory GAE 会降低 GLM-4.5-Air-SFT 的 80k×4 结果。</p>
+            </div>
+            <div class="qa-row">
+              <b>哪些是我的推断？</b>
+              <p>这篇论文的长期价值可能在“重定义长程 RL 样本结构”，而不只是上下文压缩技巧。这个判断来自方法章节和 ablation 的组合，不是论文直接宣称的定理。</p>
+            </div>
+            <div class="qa-row">
+              <b>仍未证明什么？</b>
+              <p>跨分段 GAE 只是近似；coding-oriented benchmark 之外的任务域未覆盖；更长 summary 与更好任务成功之间没有被拆成因果机制；公共模型 baseline 因 scaffold 差异不能直接横向排位。</p>
+            </div>
+            <div class="qa-row">
+              <b>下一步该看什么？</b>
+              <p>读者可以接着比较 ReSum、SUPO、Context-Folding 一类 context management RL 工作，重点看 summary 是外部工具、训练动作，还是 branch-and-fold 技能；再看各自如何处理 reward attribution。</p>
+            </div>
+          </div>
+
+          <div class="callout">
+            <b>Bottom line</b>
+            如果你在训练长程 coding agent，CompactionRL 提供了一个具体配方：压缩必须进 rollout collection，summary token 必须进 objective，segment 化后的 PPO 必须处理权重和时间距离。若只是想在推理时“把历史总结一下”，这篇论文反而提醒你：summary 质量可能已经是任务性能瓶颈。
+          </div>
+        </main>
+        <aside class="rail">
+          <div class="rail-box">
+            <div class="module-label">Limitations</div>
+            <p>对应论文 Conclusion 的 Limitations：single-window transfer 不稳定、cross-trajectory GAE 近似、实验域主要是代码长程任务。</p>
+          </div>
+          <div class="rail-box">
+            <div class="module-label">Open question</div>
+            <p>如果 summary 本身会变长，何时会重新吃掉 compaction 节省下来的预算？论文只给了当前设置下的积极迹象。</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <footer class="footer-note">
+      <h2>更大的图景</h2>
+      <p>长程 agent 的上下文问题，正在从“能不能装下更多 token”转向“哪些历史状态值得被训练成可继承的记忆”。CompactionRL 的答案很工程化：让模型自己写交接摘要，并让最终任务成败回流到这些摘要 token。</p>
+      <p>来源：<a href="https://arxiv.org/abs/2607.05378v1" target="_blank" rel="noreferrer">arXiv:2607.05378v1</a>。本页图像来自论文源包中的原始 figure PDF 转换，数值来自论文 Table 1-4 与 Figure 1-4。</p>
+    </footer>
+  </article>
+
+  <script>
+    const progress = document.getElementById("progress");
+    const updateProgress = () => {
+      const scrollTop = window.scrollY || document.documentElement.scrollTop;
+      const height = document.documentElement.scrollHeight - window.innerHeight;
+      const ratio = height > 0 ? Math.min(1, Math.max(0, scrollTop / height)) : 0;
+      progress.style.width = `${ratio * 100}%`;
+    };
+    window.addEventListener("scroll", updateProgress, { passive: true });
+    updateProgress();
+  </script>
+</body>
+</html>
