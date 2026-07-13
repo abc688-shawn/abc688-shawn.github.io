@@ -1,0 +1,1012 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>取消分组等待之后，真正的瓶颈变成价值估计</title>
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [["\\(", "\\)"]],
+        displayMath: [["\\[", "\\]"]],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"]
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      --paper: #f7f3ee;
+      --panel: #fffdf9;
+      --panel-strong: #f0e8dd;
+      --ink: #282522;
+      --muted: #716960;
+      --soft: #8d8378;
+      --line: #ded6ca;
+      --accent: #b84a3f;
+      --accent-dark: #8f332b;
+      --accent-2: #496f68;
+      --code: #eee8df;
+      --mark: #efe1dc;
+      --shadow: 0 18px 50px rgba(54, 45, 35, 0.08);
+      margin: 0;
+      background:
+        linear-gradient(90deg, rgba(40, 37, 34, 0.035) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(40, 37, 34, 0.025) 1px, transparent 1px),
+        var(--paper);
+      background-size: 44px 44px;
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      font-size: 18px;
+      line-height: 1.82;
+    }
+
+    body.theme-lab {
+      --paper: #eef2f1;
+      --panel: #fbfdfc;
+      --panel-strong: #dde8e6;
+      --ink: #18201f;
+      --muted: #53605e;
+      --soft: #6d7a78;
+      --line: #c8d5d1;
+      --accent: #19706a;
+      --accent-dark: #0f4f4a;
+      --accent-2: #a15d2b;
+      --code: #e3ece9;
+      --mark: #d7ece9;
+    }
+
+    body.theme-magazine {
+      --paper: #f5f0e7;
+      --panel: #fffaf1;
+      --panel-strong: #eadfcf;
+      --ink: #211f1b;
+      --muted: #6f6254;
+      --soft: #88796a;
+      --line: #d9ccba;
+      --accent: #9f3e35;
+      --accent-dark: #722923;
+      --accent-2: #294f73;
+      --code: #ede1d2;
+      --mark: #ead6c6;
+    }
+
+    body.theme-notebook {
+      --paper: #fbf7ec;
+      --panel: #fffdf7;
+      --panel-strong: #f1ead9;
+      --ink: #26231d;
+      --muted: #665f53;
+      --soft: #807768;
+      --line: #ddd2bc;
+      --accent: #a34d2f;
+      --accent-dark: #76341f;
+      --accent-2: #5f6f3b;
+      --code: #f0e7d4;
+      --mark: #f1dfb6;
+    }
+
+    .page {
+      width: min(1120px, calc(100% - 48px));
+      margin: 0 auto;
+      padding: 62px 0 118px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+      gap: 44px;
+      align-items: end;
+      padding: 26px 0 42px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .eyebrow,
+    .chapter-kicker,
+    .module-label,
+    .route-label {
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 850;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    .quote {
+      font-family: "Noto Serif SC", "Songti SC", "STSong", SimSun, Georgia, serif;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      max-width: 800px;
+      margin: 22px 0 20px;
+      font-size: 58px;
+      line-height: 1.12;
+      font-weight: 900;
+    }
+
+    .subtitle {
+      max-width: 780px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 22px;
+      line-height: 1.68;
+      font-weight: 650;
+    }
+
+    .byline {
+      margin: 26px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 750;
+    }
+
+    .route-panel {
+      background: color-mix(in srgb, var(--panel) 92%, var(--accent) 8%);
+      border: 1px solid var(--line);
+      border-top: 5px solid var(--accent);
+      padding: 22px 22px 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .route-title {
+      margin: 10px 0 8px;
+      font-size: 18px;
+      line-height: 1.45;
+      font-weight: 850;
+    }
+
+    .route-text {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .hero-meta {
+      display: grid;
+      gap: 10px;
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px dashed var(--line);
+    }
+
+    .hero-meta-row {
+      display: grid;
+      grid-template-columns: 74px 1fr;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .hero-meta-row b {
+      color: var(--ink);
+      font-weight: 850;
+    }
+
+    mark {
+      background: var(--mark);
+      color: inherit;
+      padding: 0 0.16em;
+    }
+
+    a {
+      color: var(--accent-dark);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 0.18em;
+    }
+
+    .toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 20px;
+      margin: 28px 0 58px;
+      padding: 17px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 15px;
+    }
+
+    .toc a {
+      color: var(--muted);
+      text-decoration: none;
+      font-weight: 760;
+    }
+
+    .toc a:hover {
+      color: var(--accent-dark);
+    }
+
+    .toc .toc-num {
+      color: var(--accent);
+      margin-right: 6px;
+      font-weight: 900;
+    }
+
+    .intro {
+      max-width: 840px;
+      margin-bottom: 34px;
+    }
+
+    p {
+      margin: 0 0 22px;
+    }
+
+    strong {
+      font-weight: 850;
+    }
+
+    .paper-roster {
+      max-width: 920px;
+      margin: 42px 0 84px;
+    }
+
+    .roster-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      color: var(--accent-dark);
+      font-size: 15px;
+      font-weight: 850;
+    }
+
+    .roster-title::before {
+      content: "";
+      width: 22px;
+      height: 2px;
+      background: var(--accent);
+    }
+
+    .paper-item {
+      display: grid;
+      grid-template-columns: 44px 1fr;
+      gap: 16px;
+      padding: 22px 0;
+      border-bottom: 1px dashed var(--line);
+    }
+
+    .paper-index {
+      width: 30px;
+      height: 30px;
+      display: inline-grid;
+      place-items: center;
+      border: 2px solid var(--accent);
+      border-radius: 50%;
+      color: var(--accent);
+      font-size: 17px;
+      font-weight: 850;
+      line-height: 1;
+    }
+
+    .paper-item-single {
+      display: block;
+    }
+
+    .paper-title {
+      margin: 0 0 4px;
+      font-size: 18px;
+      line-height: 1.55;
+      font-weight: 850;
+    }
+
+    .paper-meta,
+    .caption,
+    .note,
+    .insight-text,
+    .timeline-text,
+    .qa-answer {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .section {
+      max-width: 900px;
+      margin: 0 0 94px;
+      scroll-margin-top: 24px;
+    }
+
+    .chapter-kicker {
+      margin-bottom: 12px;
+      text-transform: none;
+      letter-spacing: 0.08em;
+    }
+
+    h2 {
+      max-width: 800px;
+      margin: 0 0 24px;
+      font-size: 36px;
+      line-height: 1.28;
+      font-weight: 850;
+    }
+
+    h3 {
+      margin: 38px 0 14px;
+      font-size: 21px;
+      line-height: 1.45;
+      font-weight: 850;
+    }
+
+    h3::before {
+      content: "§";
+      color: var(--accent);
+      margin-right: 9px;
+      font-family: Georgia, serif;
+    }
+
+    .lead {
+      color: var(--muted);
+      font-size: 20px;
+      font-weight: 650;
+    }
+
+    .figure {
+      margin: 36px 0 42px;
+      padding: 18px 18px 14px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: 0 10px 32px rgba(47, 40, 31, 0.06);
+    }
+
+    .figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      margin: 0 auto;
+      background: #fff;
+    }
+
+    .caption {
+      margin: 12px 0 0;
+    }
+
+    .caption-label {
+      color: var(--accent);
+      font-weight: 900;
+    }
+
+    .callout,
+    .equation,
+    .stats,
+    .insight-grid,
+    .timeline,
+    .qa,
+    .note {
+      margin: 34px 0 42px;
+    }
+
+    .callout {
+      padding: 22px 24px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-left: 5px solid var(--accent);
+    }
+
+    .callout-label {
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 900;
+      margin-right: 8px;
+    }
+
+    .quote {
+      margin: 36px 0 42px;
+      padding: 8px 0 8px 24px;
+      border-left: 5px solid var(--accent);
+      color: var(--ink);
+      font-size: 26px;
+      line-height: 1.52;
+      font-weight: 800;
+    }
+
+    .quote cite {
+      display: block;
+      margin-top: 12px;
+      color: var(--muted);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+      font-style: normal;
+      font-weight: 700;
+    }
+
+    .note {
+      padding: 15px 18px;
+      background: color-mix(in srgb, var(--panel-strong) 70%, #fff 30%);
+      border: 1px dashed var(--line);
+    }
+
+    .equation {
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+
+    .equation-title {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      color: var(--accent-dark);
+      font-size: 14px;
+      font-weight: 850;
+    }
+
+    .equation-scroll {
+      margin: 0;
+      padding: 20px 22px;
+      overflow-x: auto;
+      background: var(--code);
+      color: #34302c;
+    }
+
+    .equation-body {
+      min-width: max-content;
+      color: #34302c;
+      font-size: 17px;
+      line-height: 1.7;
+    }
+
+    mjx-container[jax="CHTML"][display="true"] {
+      margin: 0 !important;
+      text-align: left !important;
+    }
+
+    pre {
+      margin: 0;
+      padding: 20px 22px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: var(--code);
+      color: #34302c;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 14px;
+      line-height: 1.72;
+    }
+
+    pre {
+      margin: 28px 0;
+      border-left: 4px solid var(--accent);
+    }
+
+    .equation-explain {
+      padding: 16px 18px 18px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.72;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.92em;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      border: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .stat {
+      padding: 20px 18px;
+      border-right: 1px solid var(--line);
+    }
+
+    .stat:last-child {
+      border-right: 0;
+    }
+
+    .stat-value {
+      color: var(--accent-dark);
+      font-family: "Noto Serif SC", "Songti SC", "STSong", SimSun, Georgia, serif;
+      font-size: 27px;
+      line-height: 1.2;
+      font-weight: 900;
+    }
+
+    .stat-label {
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+      font-weight: 700;
+    }
+
+    .insight-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .insight-card {
+      min-height: 168px;
+      padding: 20px 20px 18px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+
+    .insight-title {
+      margin: 8px 0 10px;
+      font-weight: 850;
+      line-height: 1.45;
+    }
+
+    .timeline {
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .timeline-item {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 20px;
+      padding: 20px 0;
+      border-bottom: 1px dashed var(--line);
+    }
+
+    .timeline-item:last-child {
+      border-bottom: 0;
+    }
+
+    .timeline-date {
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .timeline-title,
+    .qa-question {
+      margin-bottom: 5px;
+      font-weight: 850;
+      line-height: 1.45;
+    }
+
+    .qa {
+      display: grid;
+      gap: 12px;
+    }
+
+    .qa-row {
+      padding: 18px 20px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      margin: 34px 0 42px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 680px;
+    }
+
+    th,
+    td {
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--panel-strong);
+      font-weight: 850;
+    }
+
+    .divider {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin: 66px 0;
+      color: var(--accent);
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .divider span {
+      width: 8px;
+      height: 8px;
+      border: 1px solid var(--accent);
+      transform: rotate(45deg);
+    }
+
+    ul {
+      padding-left: 1.2em;
+      margin: 0 0 24px;
+    }
+
+    li + li {
+      margin-top: 8px;
+    }
+
+    @media (max-width: 860px) {
+      .hero {
+        grid-template-columns: 1fr;
+        gap: 28px;
+      }
+
+      .route-panel {
+        box-shadow: none;
+      }
+    }
+
+    @media (max-width: 720px) {
+      body {
+        font-size: 16px;
+        background-size: 34px 34px;
+      }
+
+      .page {
+        width: min(100% - 28px, 960px);
+        padding-top: 34px;
+      }
+
+      h1 {
+        font-size: 36px;
+      }
+
+      h2 {
+        font-size: 28px;
+      }
+
+      .subtitle,
+      .lead {
+        font-size: 18px;
+      }
+
+      .paper-item {
+        grid-template-columns: 34px 1fr;
+        gap: 12px;
+      }
+
+      .figure,
+      .callout,
+      .route-panel,
+      .insight-card,
+      .qa-row {
+        padding: 14px;
+      }
+
+      .stats,
+      .insight-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .stat {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .stat:last-child {
+        border-bottom: 0;
+      }
+
+      .timeline-item {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+
+      .quote {
+        font-size: 22px;
+      }
+    }
+  </style>
+</head>
+<body class="theme-lab mode-single-paper">
+  <article class="page">
+    <header class="hero">
+      <div>
+        <div class="eyebrow">PAPER DEEP DIVE · ASYNC AGENTIC RL · 2026-07</div>
+        <h1>取消分组等待之后，真正的瓶颈变成价值估计</h1>
+        <p class="subtitle">SAO 把每个 prompt 的 8 条轨迹缩成 1 条，但没有把问题变简单：它用 token 级硬门控、一个追得更快的 critic，以及跨过 observation 的 GAE，换取异步长轨迹训练的稳定性。</p>
+        <p class="byline">单篇深读 · Zhenyu Hou, Yujiang Li, Jie Tang, Yuxiao Dong · arXiv:2607.07508v1</p>
+      </div>
+      <aside class="route-panel" aria-label="阅读路线">
+  <div class="route-label">READING ROUTE</div>
+  <div class="route-title">机制解剖 + 证据审计</div>
+  <p class="route-text">面向熟悉 PPO / GRPO 基础的技术读者；先把方法拆开，再判断每个部件究竟有多少实验证据。</p>
+<div class="hero-meta">
+<div class="hero-meta-row"><b>主线</b><span>异步把系统等待问题改写成 off-policy 与方差问题</span></div><div class="hero-meta-row"><b>最强证据</b><span>DIS 阻止早崩；critic 设计支撑约 1000 步训练</span></div><div class="hero-meta-row"><b>关键边界</b><span>没有吞吐、墙钟、硬件利用率或多训练 seed 报告</span></div>
+</div>
+</aside>
+    </header>
+
+    <nav class="toc" aria-label="目录">
+      <a href="#tension"><span class="toc-num">01</span>异步的代价</a>
+<a href="#anatomy"><span class="toc-num">02</span>方法解剖</a>
+<a href="#objectives"><span class="toc-num">03</span>公式与直觉</a>
+<a href="#critic"><span class="toc-num">04</span>critic 是承重墙</a>
+<a href="#evidence"><span class="toc-num">05</span>主结果审计</a>
+<a href="#stress-test"><span class="toc-num">06</span>负结果与在线模拟</a>
+<a href="#limits"><span class="toc-num">07</span>局限与开放问题</a>
+    </nav>
+
+    <section class="intro">
+      <p class="lead">长轨迹 agent 的生成时间高度不齐。同步 RL 必须等同一批甚至同一 prompt 的所有 rollout 收齐，最慢的样本把整批训练拖成一道同步屏障。SAO 的出发点很直接：<mark>一条轨迹完成，就让它进入训练队列</mark>。</p>
+<p>但等待消失后，数据会更快地变旧。每条轨迹可能来自不同版本的 rollout policy，而每个 prompt 只剩一次采样，GRPO 的组内相对基线也随之消失。论文真正值得读的地方，不是口号式的“异步更快”，而是它承认这种统计代价，并重新引入 critic 来控制方差。</p>
+<p>读完这份报告，你应该能准确解释四件事：<strong>single-rollout 为什么不是 batch size 1</strong>；双边 DIS 为什么是“丢弃 token”而非普通裁剪；critic 为什么要 2:1 更新并冻结 attention；以及哪些结论来自实验，哪些仍只是合理的系统动机。</p>
+<blockquote class="quote">SAO 不是把 GRPO 的 group size 调成 1；它是用一个更重的价值估计系统，换掉 prompt 内分组带来的同步屏障。<cite>本文综合判断</cite></blockquote>
+    </section>
+
+    <section class="paper-roster" aria-label="论文或报告档案">
+  <div class="roster-title">来源档案</div>
+  <div class="paper-item paper-item-single">
+  <div>
+    <p class="paper-title"><a href="https://arxiv.org/abs/2607.07508" target="_blank" rel="noreferrer">Single-Rollout Asynchronous Optimization for Agentic Reinforcement Learning</a></p>
+    <p class="paper-meta">Zhenyu Hou, Yujiang Li, Jie Tang, Yuxiao Dong · Tsinghua University · arXiv:2607.07508v1 · 2026-07-08 · cs.LG / cs.AI · 手稿页脚标注 Under review, Feb 2026；截至本次阅读未发现作者代码仓库</p>
+  </div>
+</div>
+</section>
+
+    <section class="section" id="tension">
+  <div class="chapter-kicker">第一章 · DESIGN TENSION</div>
+  <h2>异步先消灭等待，再制造策略滞后</h2>
+  <div class="stats"><div class="stat">
+  <div class="stat-value">1 / prompt</div>
+  <div class="stat-label">SAO 的 rollout 数；训练 batch 仍为 128</div>
+</div><div class="stat">
+  <div class="stat-value">~1000</div>
+  <div class="stat-label">论文训练曲线覆盖的最大 step 量级</div>
+</div><div class="stat">
+  <div class="stat-value">+2.8–4.3 pp</div>
+  <div class="stat-label">SAO 相对 GRPO+DIS 的五项基准提升</div>
+</div></div>
+<p>同步 GRPO 对同一 prompt 采样一组响应，用组内奖励做相对优势估计。这个设计同时带来两个等待：短轨迹等长轨迹，整组数据等最慢成员。agentic coding 和 tool-use 的轨迹可长至多轮、甚至 128k token，等待会被长尾放大（论文 §1，PDF pp.2–3）。</p>
+<figure class="figure">
+  <img src="images/fig-2-sao-vs-grpo-flow.png" alt="GRPO 等待整组 rollout，而 SAO 按单条 rollout 到达顺序进入训练；右侧显示两种 trust region">
+  <figcaption class="caption"><span class="caption-label">图 1</span> SAO, Fig. 2, PDF p.3。上排 GRPO 要等组内轨迹齐备，下排 SAO 让完成的单条轨迹立即具备训练资格。<strong>应该注意：图说明了队列机制，却没有给出吞吐、GPU 利用率或墙钟收益。</strong></figcaption>
+</figure>
+<div class="callout"><span class="callout-label">概念纠偏</span>single-rollout 指每个 prompt 只采一条轨迹（group size = 1），不是用一条轨迹做一次 SGD。论文的实际训练 batch size 是 128；GRPO 对照是 16 个 prompt × 8 条 rollout，同样得到 128 条轨迹（§4.1，PDF p.6）。</div>
+<div class="insight-grid"><div class="insight-card">
+  <div class="module-label">论文支持</div>
+  <div class="insight-title">分组确实会形成隐式同步点</div>
+  <div class="insight-text">Fig. 2 的执行顺序和方法描述清楚展示了组内等待为何存在。</div>
+</div><div class="insight-card">
+  <div class="module-label">我的综合</div>
+  <div class="insight-title">同步屏障被换成了统计负担</div>
+  <div class="insight-text">数据到达更自由，但 policy lag 更杂乱，且失去组内 baseline；系统问题被转化为 off-policy 校正与方差控制。</div>
+</div><div class="insight-card">
+  <div class="module-label">仍未证明</div>
+  <div class="insight-title">异步训练到底快多少</div>
+  <div class="insight-text">没有硬件、队列等待、rollout staleness 分布、样本丢弃率或端到端 wall-clock 实验。</div>
+</div></div>
+</section>
+
+<section class="section" id="anatomy">
+  <div class="chapter-kicker">第二章 · METHOD ANATOMY</div>
+  <h2>一条轨迹如何穿过 SAO</h2>
+  <p class="lead">把 SAO 看成一条数据管线更容易理解：它保存 rollout 时每个动作 token 的行为概率，让完成的轨迹进入异步队列；actor 用硬门控更新，critic 则负责把单样本优势估计的方差压下来。</p>
+<div class="timeline"><div class="timeline-item">
+  <div class="timeline-date">01 · ROLLOUT</div>
+  <div>
+    <div class="timeline-title">每个 prompt 生成一条 agent 轨迹</div>
+    <div class="timeline-text">轨迹写成 T=[a₀,o₀,a₁,o₁,…]；a 是模型动作，o 是环境反馈。生成时保存每个动作 token 的 log π_rollout。</div>
+  </div>
+</div><div class="timeline-item">
+  <div class="timeline-date">02 · QUEUE</div>
+  <div>
+    <div class="timeline-title">完成即进入可训练队列</div>
+    <div class="timeline-text">不再等待同 prompt 的其他样本，但论文没有披露队列成批、最大 staleness 或过旧样本丢弃规则。</div>
+  </div>
+</div><div class="timeline-item">
+  <div class="timeline-date">03 · ADVANTAGE</div>
+  <div>
+    <div class="timeline-title">critic 给 token 级状态估值</div>
+    <div class="timeline-text">跨 turn 时从当前 action 末 token 直接连到下一 action 首 token，跳过非模型生成的 observation。</div>
+  </div>
+</div><div class="timeline-item">
+  <div class="timeline-date">04 · UPDATE</div>
+  <div>
+    <div class="timeline-title">actor 1 次，critic 2 次</div>
+    <div class="timeline-text">actor 只接收 trust region 内 token 的梯度；critic 冻结 attention，仅更新 MoE projections。</div>
+  </div>
+</div><div class="timeline-item">
+  <div class="timeline-date">05 · EVAL</div>
+  <div>
+    <div class="timeline-title">更新后的 actor 配合 agent scaffold 评测</div>
+    <div class="timeline-text">数学使用 Python tool-integrated reasoning；SWE-Bench Verified 使用 OpenHands，最多 300 个交互 turn。</div>
+  </div>
+</div></div>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>环节</th><th>SAO 的选择</th><th>解决的风险</th><th>新依赖</th></tr></thead>
+    <tbody>
+      <tr><td>采样</td><td>每 prompt 1 条 rollout</td><td>组内等待与滞后</td><td>失去组内相对 baseline</td></tr><tr><td>off-policy</td><td>当前 policy / rollout policy 的 token 比率</td><td>不再维护历史 old-policy 集合</td><td>必须可靠保存 token log-prob</td></tr><tr><td>优势估计</td><td>token-level critic + skip-observation GAE</td><td>单 rollout 的高方差、环境 token 噪声</td><td>critic 精度与冷启动</td></tr><tr><td>优化</td><td>双边区间外直接 mask</td><td>极端 policy divergence</td><td>有效样本分布被筛选</td></tr><tr><td>critic</td><td>K=2；冻结 attention</td><td>价值网络追不上 actor、梯度过大</td><td>依赖 MoE 结构与预训练 attention 假设</td></tr>
+    </tbody>
+  </table>
+</div>
+<p>这张表揭示了 SAO 的设计逻辑：它没有消除复杂度，而是把复杂度从“每个 prompt 多采几条”移动到“维护一个足够可靠的 token-level critic”。因此 full SAO 与 GRPO 的分数差不能直接解释成 single-rollout 本身的纯收益。</p>
+</section>
+
+<section class="section" id="objectives">
+  <div class="chapter-kicker">第三章 · OBJECTIVES</div>
+  <h2>DIS 不是把比率截断，而是把越界 token 从梯度里删除</h2>
+  <p>异步生成期间，训练 policy 可能已经更新多次。SAO 不再追踪一个可能不准确的 latest old policy，也不保存历史 checkpoint 集合；它直接把 rollout 引擎记录的行为概率当作分母（§3.1，PDF p.4）。</p>
+<div class="equation">
+  <div class="equation-title">直接重要性比率（Eq. 2）</div>
+  <div class="equation-scroll">
+    <div class="equation-body">\[
+r_t(\theta)=\exp\left(\log \pi_{\theta}(a_t\mid s_t)-\log \pi_{\mathrm{rollout}}(a_t\mid s_t)\right)
+\]</div>
+  </div>
+  <div class="equation-explain">分子是当前训练 policy，分母是生成该 token 时的行为 policy。新意不在重要性采样本身，而在直接复用 rollout log-prob，省去 old-policy 推理与历史模型追踪。</div>
+</div>
+<div class="equation">
+  <div class="equation-title">双边硬门控（Eq. 3）</div>
+  <div class="equation-scroll">
+    <div class="equation-body">\[
+f(x;\epsilon_{\ell},\epsilon_h)=\begin{cases}x,&amp;1-\epsilon_{\ell}&lt;x&lt;1+\epsilon_h\\0,&amp;\text{otherwise}\end{cases}
+\]</div>
+  </div>
+  <div class="equation-explain">越界 token 的权重不是被压到边界，而是直接变成 0。与标准 PPO 按 advantage 正负选择性裁剪不同，SAO 对上下两侧都实施硬 mask。reasoning 设置的有效区间是 (0.7, 6.0)，coding 是 (0.2, 4.0)。</div>
+</div>
+<div class="equation">
+  <div class="equation-title">策略目标（Eq. 1）</div>
+  <div class="equation-scroll">
+    <div class="equation-body">\[
+\mathcal{L}(\theta)=\widehat{\mathbb{E}}_t\left[f\!\left(r_t(\theta),\epsilon_{\ell},\epsilon_h\right)\,\widehat{A}_t\,\log \pi_{\theta}(a_t\mid s_t)\right]
+\]</div>
+  </div>
+  <div class="equation-explain">只有 behavior 与 current policy 足够接近的 token 才贡献梯度，优势估计决定更新方向。论文没有明确 <code>r_t</code> 与门控函数 <code>f</code> 是否 stop-gradient；若完全按字面反传，梯度并不等同于标准 importance-weighted policy gradient，这是复现时必须澄清的歧义。</div>
+</div>
+<div class="callout"><span class="callout-label">设计交换</span>DIS 接受一种可控偏差：它不重建精确历史 policy，只用实际 rollout 概率识别“离当前 policy 太远”的 token。好处是实现更简单、训练更稳；代价是硬 mask 改变了有效训练分布，而论文只给出 clip-ratio 曲线，没有分析由此产生的选择偏差。</div>
+<h3>为什么 GAE 要跨过 observation</h3>
+<p>多轮 agent 轨迹交替包含模型动作 a 和环境反馈 o。模型并不生成 o；若把 action 末 token 与 observation 首 token 当成普通相邻状态，价值差会混入外部环境的随机性。SAO 把 Bellman 桥接点放到下一段 action 的首 token（§3.2，PDF p.5）。</p>
+<div class="equation">
+  <div class="equation-title">Skip-Observation Token-level GAE（Eq. 4–5）</div>
+  <div class="equation-scroll">
+    <div class="equation-body">\[
+\widehat{A}(a_{i,N})=\delta+\gamma\lambda\widehat{A}(a_{i+1,0}),\qquad \delta=r_t+\gamma V(a_{i+1,0})-V(a_{i,N})
+\]</div>
+  </div>
+  <div class="equation-explain">式子把当前 action 的末 token 直接连到下一 action 的首 token；关键动作是跨过整段 observation。论文没有说明 observation 间隔的 discount 计数、terminal 处理或 reward placement，也没有给出 skip 与 naive GAE 的直接消融。</div>
+</div>
+</section>
+
+<section class="section" id="critic">
+  <div class="chapter-kicker">第四章 · VALUE MODEL</div>
+  <h2>single-rollout 能不能工作，取决于 critic 能不能追上 actor</h2>
+  <p class="lead">GRPO 用同 prompt 的多条回报构造相对 baseline；SAO 取消组采样后，只能重新依赖参数化 value model。论文把单 rollout 的高方差问题，转化成 critic 的跟踪速度、训练稳定性和初始化质量问题。</p>
+<div class="insight-grid"><div class="insight-card">
+  <div class="module-label">更新频率</div>
+  <div class="insight-title">critic : actor = 2 : 1</div>
+  <div class="insight-text">每次 policy 更新对应 K=2 次 value 更新，目标是让 baseline 更快适配正在移动的 policy 分布。</div>
+</div><div class="insight-card">
+  <div class="module-label">参数冻结</div>
+  <div class="insight-title">冻结 attention，只训练 MoE projections</div>
+  <div class="insight-text">作者观察到 critic 的大梯度主要来自 full-attention 层，并假设预训练 attention 已能找到相关语义 token。</div>
+</div><div class="insight-card">
+  <div class="module-label">冷启动</div>
+  <div class="insight-title">扩大 value pretraining</div>
+  <div class="insight-text">作者称这是早期训练的关键，但没有披露数据规模、目标细节或 scaling ablation，证据最弱。</div>
+</div></div>
+<figure class="figure">
+  <img src="images/fig-4-critic-dynamics.png" alt="SAO 的 explained variance、critic gradient norm 与 token clip ratio 三组训练动态曲线">
+  <figcaption class="caption"><span class="caption-label">图 2</span> SAO, Fig. 4, PDF p.7。左：约 400 步后，K=2 的 SAO 与 K=1 基线在 explained variance 上拉开；中：冻结 attention 后 critic 梯度范数更低、更平滑；右：无 DIS 的 VAPO 几乎不 mask token，并在约 90 步崩溃。三幅都是单条训练曲线，没有训练 seed 方差。</figcaption>
+</figure>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Ablation（Table 4）</th><th>AIME2025</th><th>BeyondAIME</th><th>相对完整 SAO</th></tr></thead>
+    <tbody>
+      <tr><td>完整 SAO</td><td>97.3</td><td>74.8</td><td>—</td></tr><tr><td>K=1（无 faster value）</td><td>95.0</td><td>69.8</td><td>−2.3 / −5.0 pp</td></tr><tr><td>全参数 critic（不冻结 attention）</td><td>90.6</td><td>74.5</td><td>−6.7 / −0.3 pp</td></tr><tr><td>Vanilla VAPO（无 DIS）</td><td>91.3</td><td>69.0</td><td>−6.0 / −5.8 pp</td></tr><tr><td>Running-mean baseline</td><td>79.8</td><td>55.3</td><td>−17.5 / −19.5 pp</td></tr>
+    </tbody>
+  </table>
+</div>
+<p>消融最清楚地支持 K=2：BeyondAIME 下降 5.0 个百分点。冻结 attention 的结果则高度任务依赖，AIME 下降 6.7 点，BeyondAIME 只降 0.3 点。因此论文“每项设计都必要”的措辞应收窄为：这些设计在所报设置中共同有效，但不是每项都显示出跨任务一致收益。</p>
+</section>
+
+<section class="section" id="evidence">
+  <div class="chapter-kicker">第五章 · EVIDENCE AUDIT</div>
+  <h2>最公平的比较不是 SAO 对 vanilla GRPO，而是 SAO 对 GRPO + DIS</h2>
+  <figure class="figure">
+  <img src="images/fig-1-benchmark-overview.png" alt="SAO、GRPO 和基线在四个数学推理基准与 SWE-Bench Verified 上的准确率柱状图">
+  <figcaption class="caption"><span class="caption-label">图 3</span> SAO, Fig. 1, PDF p.1。五个任务上 SAO 都高于论文训练的 Qwen/GRPO 对照。图中 vanilla GRPO 的差距很大，但 DIS 本身已经解决了大量早期崩溃问题，所以归因时应优先看下表中的 GRPO+DIS。</figcaption>
+</figure>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>基准</th><th>GRPO + DIS</th><th>SAO</th><th>绝对提升</th></tr></thead>
+    <tbody>
+      <tr><td>AIME2025</td><td>93.5</td><td>97.3</td><td>+3.8 pp</td></tr><tr><td>BeyondAIME</td><td>70.8</td><td>74.8</td><td>+4.0 pp</td></tr><tr><td>HMMT Nov 2025</td><td>84.0</td><td>88.3</td><td>+4.3 pp</td></tr><tr><td>IMOAnswerBench</td><td>70.0</td><td>74.0</td><td>+4.0 pp</td></tr><tr><td>SWE-Bench Verified</td><td>27.0</td><td>29.8</td><td>+2.8 pp</td></tr>
+    </tbody>
+  </table>
+</div>
+<p>数学结果来自 Table 1（PDF p.5），SWE-Bench 来自 Table 2（PDF p.6）。数学评测对 AIME / HMMT / IMO 做 16 次生成平均、BeyondAIME 做 4 次平均，但没有标准差或置信区间；SWE-Bench 未说明重复次数。训练本身也没有多 seed 曲线。</p>
+<figure class="figure">
+  <img src="images/fig-3-training-all.png" alt="AIME2025、BeyondAIME 和 HMMT-Nov-2025 上 SAO、GRPO 加 DIS 与 vanilla GRPO 的训练曲线">
+  <figcaption class="caption"><span class="caption-label">图 4</span> SAO, Fig. 3, PDF p.6。三个数学基准上 vanilla GRPO 都在约 160 步崩溃；GRPO+DIS 继续稳定训练。SAO 与 GRPO+DIS 前期接近，约 400 步后才逐渐拉开——这说明 DIS 更像“止住早崩”，完整 SAO 的额外价值才在长期训练中出现。</figcaption>
+</figure>
+<div class="insight-grid"><div class="insight-card">
+  <div class="module-label">较强证据</div>
+  <div class="insight-title">DIS 改善训练稳定性</div>
+  <div class="insight-text">同 backbone、同 batch 的训练曲线显示 vanilla GRPO 早崩，而 GRPO+DIS 延伸到约 1000 步。</div>
+</div><div class="insight-card">
+  <div class="module-label">中等证据</div>
+  <div class="insight-title">完整 SAO 比 GRPO+DIS 更好</div>
+  <div class="insight-text">五项任务提升 2.8–4.3 点，但缺少训练 seed、置信区间和更广 backbone。</div>
+</div><div class="insight-card">
+  <div class="module-label">弱证据</div>
+  <div class="insight-title">single-rollout 本身提升泛化</div>
+  <div class="insight-text">主结果同时更换 critic、GAE、更新频率和冻结策略，没有只切 group size 的严格隔离。</div>
+</div></div>
+<aside class="note">论文 §4.2 写 SAO “outperforms all baselines”，但 Table 1 中 GPT-5 High 在 HMMT / IMO 为 89.2 / 76.0，GLM-4.7 为 93.5 / 82.0，均高于 SAO 的 88.3 / 74.0。更准确的表述是：SAO 超过论文训练的 Qwen 起点和 GRPO 系对照，而不是超过表中所有外部模型。</aside>
+</section>
+
+<section class="section" id="stress-test">
+  <div class="chapter-kicker">第六章 · STRESS TEST</div>
+  <h2>论文最好的负结果：把 token 平滑成 step，反而丢掉了 credit assignment</h2>
+  <p>token-level value 看起来噪声更大，直觉上可以把一个 agent turn 聚合成一个 step，再把同一优势赋给 step 内全部 token。附录 A.1 真的做了两种实现：step 内 value 平均，以及只取最后一个 token。两者在相同 400 步训练下都落后。</p>
+<figure class="figure">
+  <img src="images/fig-6-token-vs-step.png" alt="token-level SAO 与 step-level average、step-level last-token 的训练奖励曲线">
+  <figcaption class="caption"><span class="caption-label">图 5</span> SAO, Fig. 6, PDF p.13。token-level 训练在约 200 步后持续拉开。作者的解释是：step 级平滑虽然降低局部噪声，却抹掉了复杂推理轨迹内部的细粒度逻辑转折。</figcaption>
+</figure>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>动作粒度（400 steps）</th><th>AIME2025</th><th>BeyondAIME</th><th>相对 token-level</th></tr></thead>
+    <tbody>
+      <tr><td>Step-level（平均 token value）</td><td>85.8</td><td>60.5</td><td>−4.0 / −6.3 pp</td></tr><tr><td>Step-level（最后 token）</td><td>87.3</td><td>62.8</td><td>−2.5 / −4.0 pp</td></tr><tr><td>Token-level</td><td>89.8</td><td>66.8</td><td>—</td></tr>
+    </tbody>
+  </table>
+</div>
+<p>这是论文中隔离得最干净的机制结果之一：同样训练 400 步，改变的主要是动作/value 粒度。它支持 token 级 credit assignment，但<strong>不能替代 skip-observation GAE 的直接消融</strong>；后者仍然缺失。</p>
+<h3>在线学习模拟：一个有启发性的边界案例，不是真实部署验证</h3>
+<figure class="figure">
+  <img src="images/fig-5b-online-reward.png" alt="在写作风格偏好切换时，SAO 与 running-mean baseline 的训练奖励恢复曲线">
+  <figcaption class="caption"><span class="caption-label">图 6</span> SAO, Fig. 5(b), PDF p.9。灰色区表示偏好切换；SAO 的状态相关 critic 通常比 128-reward running mean 更快恢复。第一次切换差异最清楚，第二次的优势较弱。无误差条、数据规模或人工校准报告。</figcaption>
+</figure>
+<p>模拟任务按阶段切换 cute、chuunibyou、classical 等写作风格偏好，由 GLM-4.7 同时判断质量与风格，二元奖励相乘。这个实验说明 single-rollout + critic 可以在受控非平稳信号下工作；它没有证明真实用户反馈中的在线适应，因为偏好变化是预设的，judge 未做人类一致性校准，隐私与安全问题也被留在附录。</p>
+</section>
+
+<section class="section" id="limits">
+  <div class="chapter-kicker">第七章 · OPEN QUESTIONS</div>
+  <h2>这篇论文证明了什么，又把什么留给了下一篇</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>主张 / 部件</th><th>已有证据</th><th>仍缺什么</th></tr></thead>
+    <tbody>
+      <tr><td>异步效率</td><td>Fig. 2 的执行机制</td><td>wall-clock、吞吐、GPU 利用率、队列等待与 policy-lag 分布</td></tr><tr><td>single-rollout 的纯收益</td><td>完整 SAO 胜 GRPO+DIS</td><td>只切 group size、保持 critic/GAE/预算不变的隔离实验</td></tr><tr><td>value pretraining scaling</td><td>作者称对 cold start essential</td><td>数据规模、目标、曲线和消融</td></tr><tr><td>skip-observation GAE</td><td>公式与机制解释</td><td>对 naive token GAE 的直接对照；terminal / discount / reward placement 细节</td></tr><tr><td>训练稳定性</td><td>单条曲线到约 1000 steps</td><td>多 seed、置信区间、跨 backbone 与更长训练</td></tr><tr><td>GLM-5.2 750B-A40B 部署</td><td>摘要中的一句陈述</td><td>配置、曲线、成本、稳定性与任务结果</td></tr><tr><td>可复现性</td><td>主要超参数与评测协议</td><td>RL prompts / reward、优化器、γ、硬件、代码与 staleness 规则</td></tr>
+    </tbody>
+  </table>
+</div>
+<div class="callout"><span class="callout-label">作者明确边界</span>实验集中在 Qwen3-30B-A3B、agentic reasoning、coding 和模拟在线写作。作者明确说结论未必迁移到小模型、非 agentic RLHF、密集奖励或短 rollout；部署还要求基础设施可靠保存 token-level behavior probability（Appendix B，PDF p.14）。</div>
+<div class="qa"><div class="qa-row">
+  <div class="qa-question">SAO 最可信的结论是什么？</div>
+  <div class="qa-answer">在论文的 Qwen3-30B-A3B 长轨迹设置中，直接 token 级双边硬门控可以阻止若干异步基线早崩，而 group-size=1 要继续稳定训练，需要更强的 critic 设计。</div>
+</div><div class="qa-row">
+  <div class="qa-question">它是否证明异步 RL 更高效？</div>
+  <div class="qa-answer">没有。论文解释了为什么少等待，但没有报告任何端到端系统效率指标；“更高效”是合理动机，不是本论文的实证结论。</div>
+</div><div class="qa-row">
+  <div class="qa-question">为什么不能把全部增益归给 single-rollout？</div>
+  <div class="qa-answer">因为 full SAO 同时引入 DIS、参数化 critic、2:1 更新、冻结 attention、token-level skip-observation GAE 与 value pretraining，缺少只改变采样组大小的严格消融。</div>
+</div><div class="qa-row">
+  <div class="qa-question">下一步最关键的实验是什么？</div>
+  <div class="qa-answer">在相同生成预算和 actor-critic 配置下，系统扫描 group size、staleness 与硬门控阈值，同时报告有效 token 率、吞吐、训练 seed 方差和 wall-clock 性能。</div>
+</div><div class="qa-row">
+  <div class="qa-question">实践者现在能带走什么？</div>
+  <div class="qa-answer">若 agent rollout 极长且长尾明显，不要默认 GRPO 的 prompt 内分组仍是免费设计；但改成 single-rollout 前，先确认能保存准确 behavior log-prob，并有资源训练一个更新更快、粒度足够细的 critic。</div>
+</div></div>
+<blockquote class="quote">更大的图景：异步 agentic RL 的核心不是让 actor 永远忙碌，而是让更快到达、也更快过时的数据，仍然能产生可信的学习信号。<cite>本文综合判断</cite></blockquote>
+<aside class="note">来源：arXiv:2607.07508v1，版本日期 2026-07-08。本文所有图像取自 arXiv 官方 HTML / PDF；数值锚点为 Fig. 1–6、Table 1–5、§3–4 与 Appendix A–B。外部链接：<a href="https://arxiv.org/abs/2607.07508" target="_blank" rel="noreferrer">arXiv 摘要</a> · <a href="https://arxiv.org/pdf/2607.07508v1" target="_blank" rel="noreferrer">PDF</a> · <a href="https://doi.org/10.48550/arXiv.2607.07508" target="_blank" rel="noreferrer">DOI</a></aside>
+</section>
+  </article>
+</body>
+</html>
