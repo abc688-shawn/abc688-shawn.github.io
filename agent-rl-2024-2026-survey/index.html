@@ -1,0 +1,1211 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>Agent 强化学习已经从“给答案打分”进入“训练交互轨迹”</title>
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [["\\(", "\\)"]],
+        displayMath: [["\\[", "\\]"]],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"]
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      --paper: #f7f3ee;
+      --panel: #fffdf9;
+      --panel-strong: #f0e8dd;
+      --ink: #282522;
+      --muted: #716960;
+      --soft: #8d8378;
+      --line: #ded6ca;
+      --accent: #b84a3f;
+      --accent-dark: #8f332b;
+      --accent-2: #496f68;
+      --code: #eee8df;
+      --mark: #efe1dc;
+      --shadow: 0 18px 50px rgba(54, 45, 35, 0.08);
+      margin: 0;
+      background:
+        linear-gradient(90deg, rgba(40, 37, 34, 0.035) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(40, 37, 34, 0.025) 1px, transparent 1px),
+        var(--paper);
+      background-size: 44px 44px;
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      font-size: 18px;
+      line-height: 1.82;
+    }
+
+    body.theme-lab {
+      --paper: #eef2f1;
+      --panel: #fbfdfc;
+      --panel-strong: #dde8e6;
+      --ink: #18201f;
+      --muted: #53605e;
+      --soft: #6d7a78;
+      --line: #c8d5d1;
+      --accent: #19706a;
+      --accent-dark: #0f4f4a;
+      --accent-2: #a15d2b;
+      --code: #e3ece9;
+      --mark: #d7ece9;
+    }
+
+    body.theme-magazine {
+      --paper: #f5f0e7;
+      --panel: #fffaf1;
+      --panel-strong: #eadfcf;
+      --ink: #211f1b;
+      --muted: #6f6254;
+      --soft: #88796a;
+      --line: #d9ccba;
+      --accent: #9f3e35;
+      --accent-dark: #722923;
+      --accent-2: #294f73;
+      --code: #ede1d2;
+      --mark: #ead6c6;
+    }
+
+    body.theme-notebook {
+      --paper: #fbf7ec;
+      --panel: #fffdf7;
+      --panel-strong: #f1ead9;
+      --ink: #26231d;
+      --muted: #665f53;
+      --soft: #807768;
+      --line: #ddd2bc;
+      --accent: #a34d2f;
+      --accent-dark: #76341f;
+      --accent-2: #5f6f3b;
+      --code: #f0e7d4;
+      --mark: #f1dfb6;
+    }
+
+    .page {
+      width: min(1120px, calc(100% - 48px));
+      margin: 0 auto;
+      padding: 62px 0 118px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+      gap: 44px;
+      align-items: end;
+      padding: 26px 0 42px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .eyebrow,
+    .chapter-kicker,
+    .module-label,
+    .route-label {
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 850;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    .quote {
+      font-family: "Noto Serif SC", "Songti SC", "STSong", SimSun, Georgia, serif;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      max-width: 800px;
+      margin: 22px 0 20px;
+      font-size: 58px;
+      line-height: 1.12;
+      font-weight: 900;
+    }
+
+    .subtitle {
+      max-width: 780px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 22px;
+      line-height: 1.68;
+      font-weight: 650;
+    }
+
+    .byline {
+      margin: 26px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 750;
+    }
+
+    .route-panel {
+      background: color-mix(in srgb, var(--panel) 92%, var(--accent) 8%);
+      border: 1px solid var(--line);
+      border-top: 5px solid var(--accent);
+      padding: 22px 22px 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .route-title {
+      margin: 10px 0 8px;
+      font-size: 18px;
+      line-height: 1.45;
+      font-weight: 850;
+    }
+
+    .route-text {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .hero-meta {
+      display: grid;
+      gap: 10px;
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px dashed var(--line);
+    }
+
+    .hero-meta-row {
+      display: grid;
+      grid-template-columns: 74px 1fr;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .hero-meta-row b {
+      color: var(--ink);
+      font-weight: 850;
+    }
+
+    mark {
+      background: var(--mark);
+      color: inherit;
+      padding: 0 0.16em;
+    }
+
+    a {
+      color: var(--accent-dark);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 0.18em;
+    }
+
+    .toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 20px;
+      margin: 28px 0 58px;
+      padding: 17px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 15px;
+    }
+
+    .toc a {
+      color: var(--muted);
+      text-decoration: none;
+      font-weight: 760;
+    }
+
+    .toc a:hover {
+      color: var(--accent-dark);
+    }
+
+    .toc .toc-num {
+      color: var(--accent);
+      margin-right: 6px;
+      font-weight: 900;
+    }
+
+    .intro {
+      max-width: 840px;
+      margin-bottom: 34px;
+    }
+
+    p {
+      margin: 0 0 22px;
+    }
+
+    strong {
+      font-weight: 850;
+    }
+
+    .paper-roster {
+      max-width: 920px;
+      margin: 42px 0 84px;
+    }
+
+    .roster-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      color: var(--accent-dark);
+      font-size: 15px;
+      font-weight: 850;
+    }
+
+    .roster-title::before {
+      content: "";
+      width: 22px;
+      height: 2px;
+      background: var(--accent);
+    }
+
+    .paper-item {
+      display: grid;
+      grid-template-columns: 44px 1fr;
+      gap: 16px;
+      padding: 22px 0;
+      border-bottom: 1px dashed var(--line);
+    }
+
+    .paper-index {
+      width: 30px;
+      height: 30px;
+      display: inline-grid;
+      place-items: center;
+      border: 2px solid var(--accent);
+      border-radius: 50%;
+      color: var(--accent);
+      font-size: 17px;
+      font-weight: 850;
+      line-height: 1;
+    }
+
+    .paper-item-single {
+      display: block;
+    }
+
+    .paper-title {
+      margin: 0 0 4px;
+      font-size: 18px;
+      line-height: 1.55;
+      font-weight: 850;
+    }
+
+    .paper-meta,
+    .caption,
+    .note,
+    .insight-text,
+    .timeline-text,
+    .qa-answer {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .section {
+      max-width: 900px;
+      margin: 0 0 94px;
+      scroll-margin-top: 24px;
+    }
+
+    .chapter-kicker {
+      margin-bottom: 12px;
+      text-transform: none;
+      letter-spacing: 0.08em;
+    }
+
+    h2 {
+      max-width: 800px;
+      margin: 0 0 24px;
+      font-size: 36px;
+      line-height: 1.28;
+      font-weight: 850;
+    }
+
+    h3 {
+      margin: 38px 0 14px;
+      font-size: 21px;
+      line-height: 1.45;
+      font-weight: 850;
+    }
+
+    h3::before {
+      content: "§";
+      color: var(--accent);
+      margin-right: 9px;
+      font-family: Georgia, serif;
+    }
+
+    .lead {
+      color: var(--muted);
+      font-size: 20px;
+      font-weight: 650;
+    }
+
+    .figure {
+      margin: 36px 0 42px;
+      padding: 18px 18px 14px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: 0 10px 32px rgba(47, 40, 31, 0.06);
+    }
+
+    .figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      margin: 0 auto;
+      background: #fff;
+    }
+
+    .caption {
+      margin: 12px 0 0;
+    }
+
+    .caption-label {
+      color: var(--accent);
+      font-weight: 900;
+    }
+
+    .callout,
+    .equation,
+    .stats,
+    .insight-grid,
+    .timeline,
+    .qa,
+    .note {
+      margin: 34px 0 42px;
+    }
+
+    .callout {
+      padding: 22px 24px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-left: 5px solid var(--accent);
+    }
+
+    .callout-label {
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 900;
+      margin-right: 8px;
+    }
+
+    .quote {
+      margin: 36px 0 42px;
+      padding: 8px 0 8px 24px;
+      border-left: 5px solid var(--accent);
+      color: var(--ink);
+      font-size: 26px;
+      line-height: 1.52;
+      font-weight: 800;
+    }
+
+    .quote cite {
+      display: block;
+      margin-top: 12px;
+      color: var(--muted);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+      font-style: normal;
+      font-weight: 700;
+    }
+
+    .note {
+      padding: 15px 18px;
+      background: color-mix(in srgb, var(--panel-strong) 70%, #fff 30%);
+      border: 1px dashed var(--line);
+    }
+
+    .equation {
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+
+    .equation-title {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      color: var(--accent-dark);
+      font-size: 14px;
+      font-weight: 850;
+    }
+
+    .equation-scroll {
+      margin: 0;
+      padding: 20px 22px;
+      overflow-x: auto;
+      background: var(--code);
+      color: #34302c;
+    }
+
+    .equation-body {
+      min-width: max-content;
+      color: #34302c;
+      font-size: 17px;
+      line-height: 1.7;
+    }
+
+    mjx-container[jax="CHTML"][display="true"] {
+      margin: 0 !important;
+      text-align: left !important;
+    }
+
+    pre {
+      margin: 0;
+      padding: 20px 22px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: var(--code);
+      color: #34302c;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 14px;
+      line-height: 1.72;
+    }
+
+    pre {
+      margin: 28px 0;
+      border-left: 4px solid var(--accent);
+    }
+
+    .equation-explain {
+      padding: 16px 18px 18px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.72;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.92em;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      border: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .stat {
+      padding: 20px 18px;
+      border-right: 1px solid var(--line);
+    }
+
+    .stat:last-child {
+      border-right: 0;
+    }
+
+    .stat-value {
+      color: var(--accent-dark);
+      font-family: "Noto Serif SC", "Songti SC", "STSong", SimSun, Georgia, serif;
+      font-size: 27px;
+      line-height: 1.2;
+      font-weight: 900;
+    }
+
+    .stat-label {
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+      font-weight: 700;
+    }
+
+    .insight-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .insight-card {
+      min-height: 168px;
+      padding: 20px 20px 18px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+
+    .insight-title {
+      margin: 8px 0 10px;
+      font-weight: 850;
+      line-height: 1.45;
+    }
+
+    .timeline {
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .timeline-item {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 20px;
+      padding: 20px 0;
+      border-bottom: 1px dashed var(--line);
+    }
+
+    .timeline-item:last-child {
+      border-bottom: 0;
+    }
+
+    .timeline-date {
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .timeline-title,
+    .qa-question {
+      margin-bottom: 5px;
+      font-weight: 850;
+      line-height: 1.45;
+    }
+
+    .qa {
+      display: grid;
+      gap: 12px;
+    }
+
+    .qa-row {
+      padding: 18px 20px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      margin: 34px 0 42px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 680px;
+    }
+
+    th,
+    td {
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--panel-strong);
+      font-weight: 850;
+    }
+
+    .divider {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin: 66px 0;
+      color: var(--accent);
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .divider span {
+      width: 8px;
+      height: 8px;
+      border: 1px solid var(--accent);
+      transform: rotate(45deg);
+    }
+
+    ul {
+      padding-left: 1.2em;
+      margin: 0 0 24px;
+    }
+
+    li + li {
+      margin-top: 8px;
+    }
+
+    @media (max-width: 860px) {
+      .hero {
+        grid-template-columns: 1fr;
+        gap: 28px;
+      }
+
+      .route-panel {
+        box-shadow: none;
+      }
+    }
+
+    @media (max-width: 720px) {
+      body {
+        font-size: 16px;
+        background-size: 34px 34px;
+      }
+
+      .page {
+        width: min(100% - 28px, 960px);
+        padding-top: 34px;
+      }
+
+      h1 {
+        font-size: 36px;
+      }
+
+      h2 {
+        font-size: 28px;
+      }
+
+      .subtitle,
+      .lead {
+        font-size: 18px;
+      }
+
+      .paper-item {
+        grid-template-columns: 34px 1fr;
+        gap: 12px;
+      }
+
+      .figure,
+      .callout,
+      .route-panel,
+      .insight-card,
+      .qa-row {
+        padding: 14px;
+      }
+
+      .stats,
+      .insight-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .stat {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .stat:last-child {
+        border-bottom: 0;
+      }
+
+      .timeline-item {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+
+      .quote {
+        font-size: 22px;
+      }
+    }
+  </style>
+</head>
+<body class="theme-lab mode-survey">
+  <article class="page">
+    <header class="hero">
+      <div>
+        <div class="eyebrow">SURVEY · AGENT RL · 2024—2026</div>
+        <h1>Agent 强化学习已经从“给答案打分”进入“训练交互轨迹”</h1>
+        <p class="subtitle">近两年主流方法的共同方向不是再造一个 PPO，而是把奖励、工具调用、长程信用分配和训练系统重新接到同一个闭环里。</p>
+        <p class="byline">中文研究阅读报告 · 资料截至 2026-07-22</p>
+      </div>
+      <aside class="route-panel" aria-label="阅读路线">
+  <div class="route-label">READING ROUTE</div>
+  <div class="route-title">领域综述</div>
+  <p class="route-text">围绕“什么信号、什么粒度、什么系统”三条轴线读 2024—2026 的代表性工作，并区分正式发表、技术报告与预印本证据。</p>
+<div class="hero-meta">
+<div class="hero-meta-row"><b>主线</b><span>奖励信号从答案级走向步骤/轨迹/环境级</span></div><div class="hero-meta-row"><b>方法</b><span>PPO → REINFORCE/GRPO → DAPO/GSPO 与层级信用分配</span></div><div class="hero-meta-row"><b>边界</b><span>可验证任务的成功，不等于一般智能或稳健 agent 能力</span></div>
+</div>
+</aside>
+    </header>
+
+    <nav class="toc" aria-label="目录">
+      <a href="#map"><span class="toc-num">01</span>先把“Agent RL”拆成四个正交问题</a>
+<a href="#basics"><span class="toc-num">02</span>从零开始：Agent 为什么适合用强化学习训练</a>
+<a href="#optimizers"><span class="toc-num">03</span>PPO 之后：更轻的优势估计与更稳的序列更新</a>
+<a href="#rlvr"><span class="toc-num">04</span>RLVR 为什么先在数学、代码和科学任务上爆发</a>
+<a href="#tools"><span class="toc-num">05</span>把搜索、代码执行和软件仓库变成可学习的环境</a>
+<a href="#trajectory"><span class="toc-num">06</span>多轮 Agent 的难点：不是更长的 CoT，而是信用分配</a>
+<a href="#pipeline"><span class="toc-num">07</span>如果你真的要训练：一条可复现的最小路线</a>
+<a href="#compare"><span class="toc-num">08</span>把主流方法放在同一张选择表里</a>
+<a href="#limits"><span class="toc-num">09</span>哪些结论已经站稳，哪些仍然只是漂亮的曲线</a>
+    </nav>
+
+    <section class="intro">
+      <p class="lead">如果把 Agent 看成一个持续读状态、做动作、接收环境反馈的策略，那么近两年真正的变化不是“强化学习终于替代了监督微调”，而是训练对象从一条完整回答变成了可拆分、可回放、可验证的交互轨迹。</p>
+<p>这组论文共同回答四个工程问题：奖励从哪里来（规则、偏好、工具或环境）；奖励落在哪个粒度（token、步骤、turn 还是整条轨迹）；长程信用如何分配；以及 rollout 与训练怎样在昂贵的多轮环境中保持稳定。<mark>主张</mark>：Agent RL 的主流路线已经形成“RLVR 负责可验证能力、环境/工具 RL 负责行动闭环、轨迹级方法负责信用分配、异步系统负责吞吐”的分工。</p>
+<blockquote class="quote">最值得记住的判断：优化器的名字会变，但决定上限的是反馈信号是否真的测到了目标行为。<cite>综合判断；由 DeepSeek-R1、RAGEN 与 RLVR 批判性研究共同支持</cite></blockquote>
+    </section>
+
+    <section class="paper-roster" aria-label="论文或报告列表">
+  <div class="roster-title">代表性来源与它们在故事中的位置</div>
+  <div class="paper-item">
+  <div><span class="paper-index">1</span></div>
+  <div>
+    <p class="paper-title"><a href="https://arxiv.org/abs/2402.03300" target="_blank" rel="noreferrer">DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models</a></p>
+    <p class="paper-meta">DeepSeek-AI · 2024.02 · GRPO 起点 · arXiv v3 · 把 PPO 的 critic 成本改写为组内相对优势</p>
+  </div>
+</div><div class="paper-item">
+  <div><span class="paper-index">2</span></div>
+  <div>
+    <p class="paper-title"><a href="https://arxiv.org/abs/2402.14740" target="_blank" rel="noreferrer">Back to Basics: Revisiting REINFORCE Style Optimization for Learning from Human Feedback in LLMs</a></p>
+    <p class="paper-meta">Ahmadian et al. · 2024.02 · arXiv v2 · 重新审视 PPO 在 LLM RLHF 中的必要性</p>
+  </div>
+</div><div class="paper-item">
+  <div><span class="paper-index">3</span></div>
+  <div>
+    <p class="paper-title"><a href="https://arxiv.org/abs/2411.02337" target="_blank" rel="noreferrer">WebRL: Training LLM Web Agents via Self-Evolving Online Curriculum RL</a></p>
+    <p class="paper-meta">清华大学 / 智谱 · ICLR 2025 · 在线课程、ORM、KL 约束与经验回放</p>
+  </div>
+</div><div class="paper-item">
+  <div><span class="paper-index">4</span></div>
+  <div>
+    <p class="paper-title"><a href="https://arxiv.org/abs/2501.12599" target="_blank" rel="noreferrer">Kimi k1.5: Scaling Reinforcement Learning with LLMs</a></p>
+    <p class="paper-meta">Kimi Team · 2025.01 · 技术报告 · 长上下文与无 value/PRM 的规模化 RL</p>
+  </div>
+</div><div class="paper-item">
+  <div><span class="paper-index">5</span></div>
+  <div>
+    <p class="paper-title"><a href="https://doi.org/10.1038/s41586-025-09422-z" target="_blank" rel="noreferrer">DeepSeek-R1 incentivizes reasoning in LLMs through reinforcement learning</a></p>
+    <p class="paper-meta">DeepSeek-AI · Nature 2025 · RLVR / GRPO · 原始技术报告与期刊版本的交汇点</p>
+  </div>
+</div><div class="paper-item">
+  <div><span class="paper-index">6</span></div>
+  <div>
+    <p class="paper-title"><a href="https://arxiv.org/abs/2503.14476" target="_blank" rel="noreferrer">DAPO: An Open-Source LLM Reinforcement Learning System at Scale</a></p>
+    <p class="paper-meta">ByteDance Seed / 清华 AIR / 港大 · 2025.03 · 开源算法、数据、verifier 与训练配方</p>
+  </div>
+</div><div class="paper-item">
+  <div><span class="paper-index">7</span></div>
+  <div>
+    <p class="paper-title"><a href="https://arxiv.org/abs/2502.18449" target="_blank" rel="noreferrer">SWE-RL: Advancing LLM Reasoning via RL on Open Software Evolution</a></p>
+    <p class="paper-meta">Meta / FAIR 等 · NeurIPS 2025 · 用软件演化数据与规则奖励训练真实工程推理</p>
+  </div>
+</div><div class="paper-item">
+  <div><span class="paper-index">8</span></div>
+  <div>
+    <p class="paper-title"><a href="https://arxiv.org/abs/2503.09516" target="_blank" rel="noreferrer">Search-R1: Training LLMs to Reason and Leverage Search Engines with RL</a></p>
+    <p class="paper-meta">伊利诺伊大学等 · 2025.03 · 多轮搜索、retrieved-token masking、结果奖励</p>
+  </div>
+</div><div class="paper-item">
+  <div><span class="paper-index">9</span></div>
+  <div>
+    <p class="paper-title"><a href="https://arxiv.org/abs/2504.11536" target="_blank" rel="noreferrer">ReTool: Reinforcement Learning for Strategic Tool Use in LLMs</a></p>
+    <p class="paper-meta">清华 / 智谱等 · 2025.04 · 代码解释器交错 rollout 与工具时机学习</p>
+  </div>
+</div><div class="paper-item">
+  <div><span class="paper-index">10</span></div>
+  <div>
+    <p class="paper-title"><a href="https://arxiv.org/abs/2504.20073" target="_blank" rel="noreferrer">RAGEN: Understanding Self-Evolution in LLM Agents via Multi-Turn RL</a></p>
+    <p class="paper-meta">斯坦福 / NYU 等 · 2025.04 · StarPO、Echo Trap 与多轮奖励粒度</p>
+  </div>
+</div><div class="paper-item">
+  <div><span class="paper-index">11</span></div>
+  <div>
+    <p class="paper-title"><a href="https://arxiv.org/abs/2505.24298" target="_blank" rel="noreferrer">AReaL: A Large-Scale Asynchronous RL System for Language Reasoning</a></p>
+    <p class="paper-meta">InclusionAI 等 · 2025—2026 · 异步 rollout/训练解耦与 staleness 控制</p>
+  </div>
+</div><div class="paper-item">
+  <div><span class="paper-index">12</span></div>
+  <div>
+    <p class="paper-title"><a href="https://arxiv.org/abs/2508.03680" target="_blank" rel="noreferrer">Agent Lightning: Train ANY AI Agents with RL</a></p>
+    <p class="paper-meta">Microsoft · 2025.08 · 训练—Agent 解耦、统一 transition 接口与层级信用分配</p>
+  </div>
+</div><div class="paper-item">
+  <div><span class="paper-index">13</span></div>
+  <div>
+    <p class="paper-title"><a href="https://arxiv.org/abs/2507.18071" target="_blank" rel="noreferrer">Group Sequence Policy Optimization</a></p>
+    <p class="paper-meta">Qwen Team · 2025.07 · 把 token-level ratio 改成 sequence-level clipping</p>
+  </div>
+</div><div class="paper-item">
+  <div><span class="paper-index">14</span></div>
+  <div>
+    <p class="paper-title"><a href="https://arxiv.org/abs/2602.11767" target="_blank" rel="noreferrer">TSR: Trajectory-Search Rollouts for Multi-Turn RL of LLM Agents</a></p>
+    <p class="paper-meta">2026.02 · 新近预印本 · 把 test-time search 前移到训练 rollout</p>
+  </div>
+</div>
+</section>
+
+    <section class="section" id="map">
+  <div class="chapter-kicker">第一章 · FIELD MAP</div>
+  <h2>先把“Agent RL”拆成四个正交问题</h2>
+  <div class="timeline"><div class="timeline-item">
+  <div class="timeline-date">2024.02</div>
+  <div>
+    <div class="timeline-title">组内相对优势</div>
+    <div class="timeline-text">DeepSeekMath 提出 GRPO：同一问题采样一组答案，用组内均值/方差估计优势，省去 PPO 的 value model。</div>
+  </div>
+</div><div class="timeline-item">
+  <div class="timeline-date">2024.11 → 2025</div>
+  <div>
+    <div class="timeline-title">从答案到环境</div>
+    <div class="timeline-text">WebRL 把在线课程、ORM、KL 约束和 replay 接到 WebArena；Search-R1、ReTool 让搜索/代码执行成为策略的一部分。</div>
+  </div>
+</div><div class="timeline-item">
+  <div class="timeline-date">2025</div>
+  <div>
+    <div class="timeline-title">从单轮到轨迹</div>
+    <div class="timeline-text">RAGEN、Agent Lightning 将多轮 Agent 拆成 transition，直接面对长程信用分配与 Echo Trap。</div>
+  </div>
+</div><div class="timeline-item">
+  <div class="timeline-date">2025 → 2026</div>
+  <div>
+    <div class="timeline-title">从算法到系统</div>
+    <div class="timeline-text">DAPO、GSPO、AReaL 和 TSR 分别处理熵塌缩、序列级稳定性、异步吞吐与训练时搜索。</div>
+  </div>
+</div></div>
+<div class="insight-grid"><div class="insight-card">
+  <div class="module-label">SIGNAL</div>
+  <div class="insight-title">奖励是什么？</div>
+  <div class="insight-text">规则 verifier（答案/编译/测试）、ORM/PRM、人工或模型偏好、真实环境成功率。信号越可验证，越适合大规模在线 RL。</div>
+</div><div class="insight-card">
+  <div class="module-label">GRANULARITY</div>
+  <div class="insight-title">奖励落在哪里？</div>
+  <div class="insight-text">token 级更新便于复用单轮优化器；step/turn 级更新贴近行动；trajectory 级更新能处理动态工作流，但信用分配更难。</div>
+</div><div class="insight-card">
+  <div class="module-label">SYSTEM</div>
+  <div class="insight-title">数据怎样流动？</div>
+  <div class="insight-text">同步 batch 稳定但浪费 GPU；异步 rollout 提升吞吐却引入 stale data。Agent 训练已经是算法与系统协同设计。</div>
+</div></div>
+<div class="callout"><span class="callout-label">一句话结论</span>主流方法不是一条排行榜，而是一张坐标系：奖励来源 × 信号粒度 × 轨迹系统。选算法前先固定这三件事。</div>
+</section>
+
+<section class="section" id="basics">
+  <div class="chapter-kicker">第二章 · PRIMER</div>
+  <h2>从零开始：Agent 为什么适合用强化学习训练</h2>
+  <p>如果你只把语言模型理解成“输入一段文字、预测下一个 token 的机器”，监督微调很好理解：给它正确答案，最大化正确答案的概率。Agent 的难点在于，正确答案往往不是一句话，而是一串动作：先搜索、再打开页面、再调用数据库、再检查结果，最后才知道任务是否完成。中间每一步都可能合理，却也可能把后续带入死路。</p>
+<div class="insight-grid"><div class="insight-card">
+  <div class="module-label">STATE</div>
+  <div class="insight-title">状态 s：Agent 此刻知道什么</div>
+  <div class="insight-text">用户目标、历史对话、工具返回值、网页 DOM、文件内容、当前预算等。状态不是环境的全部真相，而是策略能看到的观测。</div>
+</div><div class="insight-card">
+  <div class="module-label">ACTION</div>
+  <div class="insight-title">动作 a：Agent 此刻能做什么</div>
+  <div class="insight-text">生成一段自然语言、发起 search、执行 Python、点击按钮、提交 patch，甚至决定“先不行动”。动作空间越大，探索越难。</div>
+</div><div class="insight-card">
+  <div class="module-label">REWARD</div>
+  <div class="insight-title">奖励 r：这一步或最终结果有多好</div>
+  <div class="insight-text">奖励可以是 0/1 成功率、测试通过数、人工偏好分或模型评分。强化学习并不自动知道奖励是否合理，它只会尽力放大能获得奖励的行为。</div>
+</div><div class="insight-card">
+  <div class="module-label">POLICY</div>
+  <div class="insight-title">策略 π：从状态到动作的概率分布</div>
+  <div class="insight-text">语言模型本身就是策略：给定上下文，输出每个 token 的概率。训练的目标是改变这张分布，让高回报轨迹更可能被采样。</div>
+</div></div>
+<div class="equation">
+  <div class="equation-title">把 Agent 写成一个 MDP</div>
+  <div class="equation-scroll">
+    <div class="equation-body">\[
+s_t\xrightarrow{\,a_t\sim\pi_\theta(\cdot\mid s_t)\,}r_t,\;s_{t+1}\sim P(\cdot\mid s_t,a_t),\qquad J(\theta)=\mathbb{E}_{\tau\sim\pi_\theta}\left[\sum_{t=0}^{T}\gamma^t r_t\right]
+\]</div>
+  </div>
+  <div class="equation-explain">\(P\) 是环境转移规律，\(\gamma\) 是对未来奖励的折扣，\(\tau\) 是从开始到结束的整条轨迹。Agent RL 的训练，就是让策略参数 \(\theta\) 使期望累计回报 \(J(\theta)\) 变大。LLM 场景中，一个“时间步”既可以是一个 token，也可以是一次完整工具调用；粒度选择会改变训练难度。</div>
+</div>
+<h3>三个最容易混淆的概念</h3>
+<p>第一，on-policy 与 off-policy。PPO/GRPO 通常用当前策略刚刚采样的数据更新自己，数据新鲜但昂贵；经验回放、AWR 等会重复使用旧策略数据，样本更省却要处理分布偏移。第二，value function 与 reward model。value function 预测“从这个状态继续走，未来能拿多少回报”；reward model 评估“这条回答或轨迹有多好”，二者都输出分数，却服务于不同环节。第三，RL 与 DPO。DPO 直接在偏好对上做离线概率比优化，不需要在线与环境交互；它很有用，但严格说不等价于 Agent 的在线 RL。</p>
+<div class="callout"><span class="callout-label">给初学者的心智模型</span>监督微调是在地图上模仿一条示范路线；强化学习是在能判定成败的环境里反复试走，并把“走成了”的路线概率调高。Agent 的研究难点，就是地图不完整、路线很长、成败反馈很晚。</div>
+<aside class="note">后文所有算法都可以回到这四个问题：状态是什么？动作边界在哪里？奖励如何判定？奖励应该归因到哪个时间粒度？</aside>
+</section>
+
+<section class="section" id="optimizers">
+  <div class="chapter-kicker">第三章 · POLICY OPTIMIZATION</div>
+  <h2>PPO 之后：更轻的优势估计与更稳的序列更新</h2>
+  <p>PPO 仍是共同语法：限制新旧策略偏离，用优势函数把高回报动作的概率推高。但在 LLM 中，value model、长序列和 token 级 ratio 会把显存、方差与工程复杂度放大。2024—2025 的主流改法有三条：用 REINFORCE 风格目标削掉不必要组件；用 GRPO 的组内统计替代 critic；用 DAPO/GSPO 调整 clipping、采样和 ratio 的粒度。</p>
+<h3>1. REINFORCE：最朴素，也最容易被低估的基线</h3>
+<p>REINFORCE 的直觉很简单：采样一条轨迹，拿到回报后，把这条轨迹中出现过的动作概率整体往上推；回报差的轨迹则往下推。它不需要 PPO 那样的 clipped surrogate，也不必训练一个庞大的 value model。缺点同样直接：如果每条轨迹的回报差异很大，梯度方差会很高。实践中常用 baseline、leave-one-out average（RLOO）或同 prompt 的多次采样来降低方差。Back to Basics 的贡献不是发明新公式，而是指出在 RLHF 的短序列、奖励昂贵、数据接近 on-policy 的设置里，PPO 的许多保护机制未必值得付出额外成本。</p>
+<div class="equation">
+  <div class="equation-title">REINFORCE 的核心更新</div>
+  <div class="equation-scroll">
+    <div class="equation-body">\[
+\nabla_\theta J(\theta)=\mathbb{E}_{\tau\sim\pi_\theta}\left[(R(\tau)-b(x))\sum_{t}\nabla_\theta\log\pi_\theta(a_t\mid s_t)\right]
+\]</div>
+  </div>
+  <div class="equation-explain">\(R(\tau)-b(x)\) 是中心化后的回报：高于 baseline 的轨迹被增强，低于 baseline 的轨迹被抑制。baseline 不改变期望梯度，却能显著降低噪声；RLOO 用同一个 prompt 的其他样本平均奖励作为 baseline。</div>
+</div>
+<h3>2. PPO：为什么仍然是 Agent RL 的默认语言</h3>
+<p>PPO 的“clip”可以理解为限速器：即便某条轨迹奖励很高，也不允许一次更新把对应 token 的概率扩大几十倍。它通常配合 actor-critic：actor 负责决定动作，critic 估计每个状态的未来价值，再用 GAE 把最终回报传播到中间步骤。对多轮 Agent 来说，这个 critic 很有吸引力，因为网页点击、工具调用等动作不一定能被同一个最终答案解释；但 critic 也可能学偏，尤其是在状态很长、环境非平稳或成功样本很少时。</p>
+<h3>3. GRPO：用“同题对比”替代 value model</h3>
+<p>GRPO 的关键工程观察是：同一个问题可以一次采样多个答案，这些答案共享相同的初始状态，因此组内奖励的均值和方差天然提供了一个 baseline。这样就不必再维护一套与语言模型同样昂贵的 value head。它特别适合数学、代码等“同题可多采样、结果可验证”的任务；但如果一个组里的答案全部正确或全部错误，标准化优势会接近零，训练批次就没有有效方向。DAPO 的 Dynamic Sampling 正是在处理这种无梯度 prompt group。</p>
+<h3>4. DAPO：把训练稳定性拆成四个可观测故障</h3>
+<p>DAPO 不是简单把 GRPO 换个名字，而是把大规模 RL 中常见的失败模式逐一对应到机制：Clip-Higher 放宽重要性比率的上界，避免熵过快塌缩；Dynamic Sampling 丢弃组内准确率为 0 或 1 的 prompt，保证 batch 中有有效梯度；Token-level policy gradient 适应长 CoT 的不同 token 贡献；Overlong Reward Shaping 给超长/截断输出更平滑的惩罚，减少奖励噪声。它的价值在于把“训练能否跑起来”变成可复现的配方，而不是只报告最终分数。</p>
+<h3>5. GSPO：为什么要从 token ratio 走向 sequence ratio</h3>
+<p>在长序列中，单个 token 的重要性比率可能因为局部概率变化而剧烈波动，但最终奖励通常是整条序列的。GSPO 因此先把整条输出的 log-likelihood ratio 聚合为 sequence-level ratio，再做 clipping、reward 和优化。直觉上，这是让“奖励作用的对象”和“裁剪保护的对象”保持一致，尤其适合 MoE 与长 CoT。代价是更粗的更新粒度可能掩盖序列内部的错误 token，Qwen 团队报告的稳定性优势需要结合其具体模型和基础设施解读。</p>
+<h3>6. RLHF、RLAIF 与 DPO：Agent RL 之前的对齐谱系</h3>
+<p>RLHF 先收集人类对回答的偏好，训练 reward model，再用 PPO 等在线 RL 最大化偏好分；RLAIF 把人类标签换成 AI 评审，规模更大但更依赖评审模型的偏差。DPO 则直接在 chosen/rejected 对上优化相对 log-probability，不需要 rollout 环境和在线 reward。它们适合“回答质量/安全/风格”这种偏好任务，而 Agent RL 更关注动作造成的真实后果。实际系统常把两者串联：SFT/RLHF 让模型遵守工具协议，RLVR 或环境 RL 再让它学会完成任务。Back to Basics 的提醒是，在线 RL 的收益不能被 PPO 的实现复杂度遮蔽；但在真正长程环境里，DPO 也无法替代对状态转移和延迟奖励的建模。</p>
+<div class="equation">
+  <div class="equation-title">PPO/GRPO 的共同骨架</div>
+  <div class="equation-scroll">
+    <div class="equation-body">\[
+\mathcal{L}(\theta)=\mathbb{E}_{t}\left[\min\left(r_t(\theta)A_t,\operatorname{clip}(r_t(\theta),1-\epsilon,1+\epsilon)A_t\right)\right]-\beta\,\mathrm{KL}(\pi_\theta\|\pi_{\mathrm{ref}})
+\]</div>
+  </div>
+  <div class="equation-explain">\(r_t\) 是新旧策略的概率比，\(A_t\) 表示动作相对基线的好坏，clip 与 KL 防止一次更新把策略推得过远。PPO 保留 critic；GRPO 则从同一问题的多个采样结果中直接计算相对优势。</div>
+</div>
+<div class="equation">
+  <div class="equation-title">GRPO 的组内相对优势</div>
+  <div class="equation-scroll">
+    <div class="equation-body">\[
+A_i=\frac{r_i-\operatorname{mean}(r_1,\ldots,r_G)}{\operatorname{std}(r_1,\ldots,r_G)+\epsilon}
+\]</div>
+  </div>
+  <div class="equation-explain">同一 prompt 采样 \(G\) 个输出，奖励高于组均值的输出得到正优势，低于组均值得到负优势。DeepSeekMath 与 DeepSeek-R1 证明了在数学/代码等可验证任务里，去掉独立 value model 仍能有效训练。</div>
+</div>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>路线</th><th>它改了什么</th><th>适合的信号</th><th>代价/边界</th></tr></thead>
+    <tbody>
+      <tr><td>REINFORCE / RLOO</td><td>保留在线策略梯度，减少 PPO 组件</td><td>偏好或结果奖励</td><td>方差控制依赖 baseline/采样；Back to Basics 的结论主要在 RLHF 设定成立</td></tr><tr><td>GRPO</td><td>组内相对优势，省 value model</td><td>数学、代码、可验证答案</td><td>组内全 0/全 1 时没有有效梯度；依赖 verifier 质量</td></tr><tr><td>DAPO</td><td>Clip-Higher、Dynamic Sampling、token-level loss、Overlong shaping</td><td>长 CoT + rule verifier</td><td>更像一套可复现 recipe；超出可验证任务后的收益尚未证明</td></tr><tr><td>GSPO</td><td>sequence likelihood ratio 与 sequence-level clipping</td><td>长序列、MoE RL</td><td>相比 GRPO 更稳定的主张仍主要来自 Qwen 系统实验</td></tr><tr><td>PPO + critic</td><td>GAE/价值函数做 step-level credit</td><td>多轮环境、稀疏回报</td><td>训练和显存开销高，critic 误差会传导到策略</td></tr>
+    </tbody>
+  </table>
+</div>
+<p>横向看，优化器创新解决的是“怎样更新得稳”；它们本身并不解决“奖励是否代表目标”。这也是为什么 DeepSeek-R1 的 rule reward、WebRL 的 ORM、SWE-RL 的 patch similarity 必须和算法分开审读。</p>
+<aside class="note">证据等级：DeepSeekMath 的 GRPO 原始论文与 DeepSeek-R1 的 Nature 版本给出最清晰的算法/奖励描述；DAPO、GSPO 是强影响力技术报告或预印本，适合作为工程趋势而非已定论。</aside>
+</section>
+
+<section class="section" id="rlvr">
+  <div class="chapter-kicker">第四章 · VERIFIABLE REWARDS</div>
+  <h2>RLVR 为什么先在数学、代码和科学任务上爆发</h2>
+  <p>RLVR（Reinforcement Learning with Verifiable Rewards）的关键不是“奖励更智能”，而是奖励更容易核验：最终答案、编译器/单元测试、格式约束都能把成功压缩成低噪声信号。DeepSeek-R1 在 Nature 版本中明确区分 reasoning data 的 rule-based reward 与 general data 的 model-based reward，并承认后者更容易被 reward hacking。</p>
+<h3>为什么 verifier 比“更聪明的评审模型”更重要</h3>
+<p>一个 verifier 不需要解释答案为什么好，只需要在训练规模上稳定地判断对错。数学题可以比较最终数字，代码可以运行测试，网页任务可以读取环境状态。这种二值信号看起来粗糙，却有三个优势：标注成本低、跨 batch 一致、不会因为语言风格改变而漂移。相反，开放式回答依赖 reward model 或 LLM-as-a-judge，模型可能学会迎合评分器的表面偏好，而不是完成任务。RLVR 的“可验证”不是哲学上的真理，而是工程上足够可靠的代理目标。</p>
+<h3>DeepSeek-R1：纯 RL、冷启动与第二阶段对齐的组合</h3>
+<p>R1-Zero 直接在 base model 上用规则奖励训练，展示了答案级 RL 可以让模型逐渐生成更长的思考、检查和反思。它也暴露出语言混用、可读性差和不会调用工具的问题。因此最终的 DeepSeek-R1 不是“纯 RL 一步到位”：先用少量 cold-start reasoning data 改善格式，再做 reasoning RL，然后 rejection sampling + SFT，最后用 helpfulness/harmlessness 的 model-based reward 做第二阶段 RL。这个流程说明 RL 更像能力放大器，冷启动和 SFT 负责把能力装进可用的交互外壳。</p>
+<h3>DAPO 与 Kimi：从能力演示走向规模化 recipe</h3>
+<p>DAPO 的贡献是开放训练配方：数据、verifier、脚本、模型和基础设施都公开，Qwen2.5-32B 在 AIME 2024 达到 50%，并报告比 DeepSeek-R1-Zero-Qwen-32B 少一半训练步数。Kimi k1.5 则把重点放在长上下文、长短 CoT 转换和简化的 RL 框架，报告 AIME、MATH500、Codeforces、MathVista 等多模态结果。两者都支持“工程系统决定可复现性”的判断，但它们的 benchmark 仍主要集中在可验证推理，不能直接推出通用 Agent 能力。</p>
+<h3>RLVR 的反例：pass@1 提高，能力边界未必扩大</h3>
+<p>训练后模型往往更擅长在第一次尝试就找到正确答案，因此 pass@1 上升。但如果给 base model 很大的采样预算，原本藏在其分布中的正确路径可能也会被找到。Yue 等人的批判性研究据此认为，RLVR 可能主要是在重新加权已有路径，而不是创造全新的推理程序；另一类工作则指出，单看最终答案的 pass@k 可能把错误但碰巧答对的思路算作成功。对初学者而言，最重要的不是在两种叙事中选边，而是区分“采样效率提高”“推理多样性变化”和“真正学到新算法”这三个命题。</p>
+<div class="stats"><div class="stat">
+  <div class="stat-value">15.6 → 77.9%</div>
+  <div class="stat-label">DeepSeek-R1-Zero AIME 2024 pass@1（Nature Fig. 1）</div>
+</div><div class="stat">
+  <div class="stat-value">50%</div>
+  <div class="stat-label">DAPO Qwen2.5-32B AIME 2024，公开 recipe</div>
+</div><div class="stat">
+  <div class="stat-value">77.5</div>
+  <div class="stat-label">Kimi k1.5 报告的 AIME 分数</div>
+</div></div>
+<figure class="figure">
+  <img src="images/webrl-results.png" alt="WebRL 成功率曲线">
+  <figcaption class="caption"><span class="caption-label">证据图 A</span> WebRL Figure 1(a) 的结果子图：在线课程迭代后，成功率持续上升。它支持的是“课程与反馈闭环有效”，不是某个 PPO 变体在所有 Agent 上都更优。来源：<a href="https://arxiv.org/abs/2411.02337" target="_blank" rel="noreferrer">WebRL</a>，Fig. 1。</figcaption>
+</figure>
+<div class="insight-grid"><div class="insight-card">
+  <div class="module-label">DEEPSEEK-R1</div>
+  <div class="insight-title">奖励只需可靠，不必解释每一步</div>
+  <div class="insight-text">R1 使用 accuracy + format reward；作者观察到 self-verification、reflection 等行为出现，但这仍是结果层面的相关性，不等于模型获得可解释的过程监督。</div>
+</div><div class="insight-card">
+  <div class="module-label">DAPO</div>
+  <div class="insight-title">系统 recipe 与算法同等重要</div>
+  <div class="insight-text">DAPO 公开 DAPO-Math-17k、verifier、脚本和模型，并报告 128 张 H20 GPU 的复现路径；它把“如何稳定跑起来”变成论文贡献。</div>
+</div><div class="insight-card">
+  <div class="module-label">KIMI K1.5</div>
+  <div class="insight-title">长上下文替代了更多复杂组件</div>
+  <div class="insight-text">Kimi 报告强调不使用 MCTS、value function、PRM，依靠长上下文与改进的 policy optimization。由于是团队技术报告，跨团队复现仍需谨慎。</div>
+</div></div>
+<div class="equation">
+  <div class="equation-title">结果奖励的真实盲点</div>
+  <div class="equation-scroll">
+    <div class="equation-body">\[
+R(\tau)=\mathbf{1}[\operatorname{verify}(y)=1]\quad\Longrightarrow\quad \nabla_\theta J(\theta)\text{ 只知道“整条轨迹成功”，不知道哪一步值得归因}
+\]</div>
+  </div>
+  <div class="equation-explain">这正是 Agent 场景中从 reasoning RL 走向 trajectory RL 的分水岭：同一个最终奖励可能来自多个工具调用、回退和偶然成功，不能自然地告诉策略“是哪一次动作改变了局面”。</div>
+</div>
+</section>
+
+<section class="section" id="tools">
+  <div class="chapter-kicker">第五章 · ENVIRONMENT &amp; TOOLS</div>
+  <h2>把搜索、代码执行和软件仓库变成可学习的环境</h2>
+  <p>DeepSeek-R1 自己把“不会用搜索与计算器”列为限制。Search-R1、ReTool 和 SWE-RL 的共同动作，是把工具/软件环境从推理外部的外挂，改成 rollout 内部的状态转移：模型必须学会何时调用、传什么参数、如何读取结果、何时停止。</p>
+<h3>WebRL：先解决“没有足够训练题”再谈优化器</h3>
+<p>WebArena 的难点不是动作空间有多复杂，而是任务长、成功信号稀疏、可用训练指令少。WebRL 从失败轨迹里自动改写出新任务，用 critic 过滤太简单或不可完成的指令，再用 ORM 判断最终状态是否完成。每一轮课程都在当前能力附近生成样本，因此模型更容易遇到“刚好能学会”的挑战。KL 约束限制策略漂移，experience replay 保留旧知识，actor-confidence filtering 则避免回放太熟或太难的轨迹。这个框架本质上把 curriculum、reward model 和 off-policy replay 绑在了一起。</p>
+<h3>Search-R1：检索结果既是观察，也是训练噪声</h3>
+<p>传统 RAG 把搜索当成固定预处理：先检索，再让模型回答。Search-R1 让模型在推理中自己决定何时搜索、搜索几次、每次问什么。难点是检索文本不是策略生成的 token，直接把它和模型输出拼接会污染 log-probability 和梯度。retrieved-token masking 只更新模型真正生成的查询与回答 token；最终结果奖励则鼓励模型学会“需要时搜索、足够时停止”。这比提示词层面的 ReAct 更接近策略学习，但它仍依赖固定搜索 API 和 QA benchmark。</p>
+<h3>ReTool：工具使用是一个决策问题，不只是能力外挂</h3>
+<p>ReTool 先用 cold-start 数据教模型读懂代码解释器的输入/输出格式，再在 rollout 中允许自然语言思考与代码执行交错。模型必须同时学三件事：是否值得调用工具、调用时写出什么代码、工具返回后如何修正前一步。论文报告在 AIME 2024 上 400 步达到 67%，而无 CI 的文本 RL 基线在 1080 步只有 40%，并观察到自纠错和更早调用代码的行为。需要谨慎的是，冷启动和任务都围绕数学计算，工具策略是否能迁移到浏览器、数据库或真实软件尚未由该论文证明。</p>
+<h3>SWE-RL：把软件演化记录视作天然的行为数据</h3>
+<p>软件仓库记录了 issue、提交、pull request、代码快照和测试结果，这些记录比人工合成的 CoT 更接近真实工程工作流。SWE-RL 从历史 PR 构造 issue-to-patch 任务，用规则奖励衡量生成 patch 与 oracle patch 的相似度，并用 reproduction tests 做候选重排。Llama3-SWE-RL-70B 在 SWE-bench Verified 达 41.0%，且数学、代码推理和 MMLU 等 OOD 任务也有提升。它最值得学习的地方是数据来源设计；最大风险则是 patch similarity 会惩罚功能等价但写法不同的解。</p>
+<div class="callout"><span class="callout-label">工具 RL 的统一抽象</span>一次工具调用可以写成：状态 s（目标 + 历史 + 工具输出）→ 动作 a（调用/参数/自然语言）→ 环境新状态 s′ → 结果奖励 r。只要工具输出会改变下一步决策，它就不再是 prompt 拼接，而是 Agent 的环境。</div>
+<figure class="figure">
+  <img src="images/webrl-overview.png" alt="WebRL 在线课程与经验回放框架">
+  <figcaption class="caption"><span class="caption-label">证据图 B</span> WebRL Figure 2：失败轨迹生成更难的新任务，ORM 提供结果信号，KL 约束与 actor-confidence filtering 控制分布漂移。它是“环境反馈 + 课程 + replay”组合的典型。来源：<a href="https://arxiv.org/abs/2411.02337" target="_blank" rel="noreferrer">WebRL</a>，Fig. 2。</figcaption>
+</figure>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>论文</th><th>Agent 动作</th><th>信号设计</th><th>主要证据</th><th>最重要的限制</th></tr></thead>
+    <tbody>
+      <tr><td>WebRL (ICLR 2025)</td><td>网页点击、滚动、输入</td><td>ORM 二值成功 + KL + replay</td><td>Llama3.1-8B 4.8% → 42.4%；70B 达 49.1%</td><td>依赖 WebArena-Lite 与 ORM；任务可行性需过滤</td></tr><tr><td>Search-R1</td><td>生成多次 search query 并读检索结果</td><td>结果奖励 + retrieved-token masking</td><td>七个 QA 数据集；相对 RAG baseline 有 20—41% 提升（v5 摘要）</td><td>搜索引擎/检索分布与离线 benchmark 绑定</td></tr><tr><td>ReTool</td><td>自然语言与 code interpreter 交错</td><td>AIME 最终正确性奖励</td><td>AIME 2024 67%，400 steps；文本 RL 40%/1080 steps</td><td>预印本；冷启动数据与数学任务占主导</td></tr><tr><td>SWE-RL (NeurIPS 2025)</td><td>定位文件、生成 patch、跑 reproduction tests</td><td>patch 相似度规则奖励 + 测试重排</td><td>SWE-bench Verified 41.0%，并提升 OOD 数学/代码</td><td>相似度不是语义等价；Agentless Mini scaffold 简化了定位</td></tr>
+    </tbody>
+  </table>
+</div>
+<p>这组结果支持一个更具体的判断：工具调用能力不是“多一个 API token”这么简单，它需要把工具输出重新编码为下一步可决策的状态，并为失败/回退提供可学习的反馈。SWE-RL 的成功尤其说明，真实软件演化记录可以充当 RL 数据源；但其 reward 仍偏向 oracle patch 的表面相似度。</p>
+</section>
+
+<section class="section" id="trajectory">
+  <div class="chapter-kicker">第六章 · TRAJECTORY RL</div>
+  <h2>多轮 Agent 的难点：不是更长的 CoT，而是信用分配</h2>
+  <p>单轮数学题的轨迹大致是“prompt → 一段回答 → 最终答案”；多轮 Agent 的轨迹则可能是“计划 → 搜索 → 读取结果 → 修改计划 → 执行工具 → 回退 → 再尝试”。如果只在最后给一个 0/1，所有动作会收到同样的成功或失败标签，导致高方差和错误归因；如果把每一步都强行标注，又需要昂贵且可能主观的过程监督。轨迹 RL 的核心，就是在这两个极端之间找到可计算的信用分配。</p>
+<h3>三种信用分配粒度</h3>
+<p>Token-level 直接复用语言模型的 log-probability，计算高效，但它很难知道一段长文本里哪句话真正改变了环境。Turn/action-level 把一次 LLM 调用或工具调用视作一个动作，更贴近 Agent 设计，也更容易接入 critic。Trajectory-level 只对整条轨迹评分，最简单、最稳健，却把探索成功的原因隐藏起来。实际系统常采用层级做法：先把 episode return 分给 action，再在 action 内用 token-level loss 更新。</p>
+<h3>RAGEN：先把失败模式测出来</h3>
+<p>RAGEN 在四个风格化环境里观察到 Echo Trap：训练早期某些策略偶然获得高回报，随后奖励方差突然塌陷、梯度尖峰出现，模型重复同一种浅层动作。StarPO-S 用轨迹过滤、critic 和梯度稳定来缓和这一现象；论文还发现，若奖励只看最终成功而不包含 reasoning-aware 的中间信号，模型可能产生“看起来像思考”的幻觉式文本，却没有真正改善行动。RAGEN 的价值更接近诊断学：它告诉我们多轮 RL 不能只把单轮 GRPO 拉长。</p>
+<h3>Agent Lightning：先标准化数据接口，再替换算法</h3>
+<p>真实 Agent 的执行框架可能来自 LangChain、OpenAI Agents SDK、AutoGen 或自写代码；把所有 turn 拼成一条长序列再 masking，容易破坏位置编码连续性，也难调试。Agent Lightning 把每次 LLM call 抽象成 transition，并用 Training-Agent Disaggregation 把 rollout 与 trainer 解耦。它的关键设计是可插拔：今天可以接 GRPO，明天可以接 PPO、REINFORCE++ 或更复杂的层级 value。需要看到的限制是，当前实现把一个 episode 的回报平均分给每个 action，真正精细的 credit assignment仍是未来工作。</p>
+<h3>AReaL：吞吐与数据新鲜度的交换</h3>
+<p>同步 RL 的节奏是：所有 rollout 完成一个 batch，trainer 更新一次，再开始下一轮。长短回答混在一起时，短样本必须等待最长样本，GPU 大量空闲。AReaL 让 rollout worker 持续生成、training worker 收集到足够样本就更新，于是生成和训练完全异步。代价是样本可能由旧策略生成，policy 与 behavior policy 之间出现 staleness。AReaL 用 worker 负载平衡和 staleness-enhanced PPO 控制这一偏差；2.77× speedup 是系统吞吐指标，不应直接读成 2.77× 智能提升。</p>
+<h3>TSR：把 test-time search 前移到训练期</h3>
+<p>长程环境中的随机 rollout 经常一开始就走入死路，后续所有 token 都只能得到失败奖励。TSR 在训练生成阶段加入 best-of-N、beam 或 shallow lookahead，用状态反馈挑出更有希望的局部动作，再把高质量轨迹交给 PPO/GRPO。它不改变优化目标，而是改变训练数据的质量，因此与不同 optimizer 兼容。代价是一次性增加 rollout compute，并可能让策略过度依赖搜索器提供的偏好。</p>
+<div class="equation">
+  <div class="equation-title">从整条轨迹拆到每次调用</div>
+  <div class="equation-scroll">
+    <div class="equation-body">\[
+\mathcal{L}_{\mathrm{agent}}(\theta)=-\sum_{k=1}^{K} A_k\sum_{t\in a_k}\log\pi_\theta(a_{k,t}\mid s_k)
+\]</div>
+  </div>
+  <div class="equation-explain">\(s_k\) 是第 \(k\) 次 LLM 调用看到的 Agent 状态，\(a_k\) 是该次输出。关键在 \(A_k\)：它可以把 episode return 平均分给每次调用，也可以由 critic/heuristic/learned model 做更精细的 credit assignment。</div>
+</div>
+<figure class="figure">
+  <img src="images/agent-lightning-algorithm.png" alt="LightningRL 三种轨迹组织方式">
+  <figcaption class="caption"><span class="caption-label">机制图 C</span> Agent Lightning Figure 3：从单轮 GRPO、把多轮拼接后 masking，到按 transition 拆分并显式做 credit assignment。图中最重要的变化是数据接口，而不是另一个 token-level loss。来源：<a href="https://arxiv.org/abs/2508.03680" target="_blank" rel="noreferrer">Agent Lightning</a>，Fig. 3。</figcaption>
+</figure>
+<figure class="figure">
+  <img src="images/areal-timeline.png" alt="AReaL 异步 rollout 时间线">
+  <figcaption class="caption"><span class="caption-label">机制图 D</span> AReaL 的 interruptible generation 时间线：rollout 不再等待最长样本结束，训练与生成可以交错推进。它直接暴露了吞吐与数据新鲜度之间的系统张力。来源：<a href="https://arxiv.org/abs/2505.24298" target="_blank" rel="noreferrer">AReaL</a>，Fig. 2。</figcaption>
+</figure>
+<div class="insight-grid"><div class="insight-card">
+  <div class="module-label">RAGEN</div>
+  <div class="insight-title">Echo Trap 是多轮 RL 的反模式</div>
+  <div class="insight-text">RAGEN 报告 reward variance cliff 与 gradient spike；StarPO-S 通过轨迹过滤、critic 和梯度稳定处理。作者还发现，没有 reasoning-aware 的细粒度奖励，模型容易学到浅层策略或幻觉式思考。</div>
+</div><div class="insight-card">
+  <div class="module-label">AGENT LIGHTNING</div>
+  <div class="insight-title">先把 Agent 执行与训练解耦</div>
+  <div class="insight-text">LightningRL 把任意 Agent 调用转成 transition，再把 episode return 分到 action 与 token。当前实现的 action value 仍是“每个动作相同”，所以它更像可扩展接口，而非已解决的 credit assignment。</div>
+</div><div class="insight-card">
+  <div class="module-label">AREAL</div>
+  <div class="insight-title">异步带来 2.77× 吞吐，但也带 stale data</div>
+  <div class="insight-text">AReaL v5 摘要报告在相同 GPU 数下最高 2.77× speedup，并用 staleness-enhanced PPO 控制过时样本。系统效率的提升不能直接等价为样本效率或泛化能力提升。</div>
+</div><div class="insight-card">
+  <div class="module-label">TSR · 2026</div>
+  <div class="insight-title">把 search 前移到训练 rollout</div>
+  <div class="insight-text">TSR 在 Sokoban、FrozenLake、WebShop 上将 best-of-N/beam/shallow lookahead 用于训练时轨迹构造，与 PPO/GRPO 解耦，报告最高 15% 提升。它代表 2026 年的一个方向：让探索策略本身成为训练模块。</div>
+</div></div>
+<div class="callout"><span class="callout-label">实用判断</span>如果任务只有最终成功/失败，先改 reward 与任务分布；如果 reward 已可靠但多轮训练不稳，再考虑 critic、turn-level credit 或 rollout search；如果 GPU 利用率低，再改成异步系统。顺序反过来通常只会把噪声跑得更快。</div>
+</section>
+
+<section class="section" id="pipeline">
+  <div class="chapter-kicker">第七章 · FROM ZERO TO AGENT RL</div>
+  <h2>如果你真的要训练：一条可复现的最小路线</h2>
+  <p>论文里的算法名容易让人误以为训练 Agent 只需要替换一个 loss。实际工程更像一条流水线：先定义任务和终止条件，再构造可判定的 verifier，准备初始策略，生成 rollout，记录每次动作与环境观察，计算奖励/优势，更新策略，最后用独立任务和独立环境评估。任何一环含糊，后面的分数都很难解释。</p>
+<div class="timeline"><div class="timeline-item">
+  <div class="timeline-date">Phase 0</div>
+  <div>
+    <div class="timeline-title">定义状态、动作和成功条件</div>
+    <div class="timeline-text">明确 Agent 能看到的上下文、工具 schema、最大 turn 数、超时与终止规则。先写 verifier，再写训练代码。</div>
+  </div>
+</div><div class="timeline-item">
+  <div class="timeline-date">Phase 1</div>
+  <div>
+    <div class="timeline-title">建立 SFT / prompted baseline</div>
+    <div class="timeline-text">测 base model 在训练任务、held-out 任务和不同温度下的 pass@1/pass@k；没有 baseline，就不知道 RL 是否真的带来增益。</div>
+  </div>
+</div><div class="timeline-item">
+  <div class="timeline-date">Phase 2</div>
+  <div>
+    <div class="timeline-title">小规模 outcome RL</div>
+    <div class="timeline-text">可验证任务优先用 GRPO 或简单 REINFORCE/RLOO；记录奖励分布、组内全 0/全 1 比例、长度、KL 和熵。</div>
+  </div>
+</div><div class="timeline-item">
+  <div class="timeline-date">Phase 3</div>
+  <div>
+    <div class="timeline-title">处理失败模式</div>
+    <div class="timeline-text">有效梯度太少时做 dynamic sampling；长输出被截断时做 overlong shaping；多轮错归因时引入 critic 或 turn-level credit。</div>
+  </div>
+</div><div class="timeline-item">
+  <div class="timeline-date">Phase 4</div>
+  <div>
+    <div class="timeline-title">再做工具、回放与异步化</div>
+    <div class="timeline-text">先验证工具调用是否迁移，再加入 replay/curriculum；只有 rollout 成为吞吐瓶颈时才引入 AReaL 式异步系统。</div>
+  </div>
+</div></div>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>监控量</th><th>它在告诉你什么</th><th>异常时先查什么</th></tr></thead>
+    <tbody>
+      <tr><td>平均奖励 / 成功率</td><td>任务完成结果是否提升</td><td>verifier 是否误判、任务是否太难</td></tr><tr><td>组内全 0/全 1 比例</td><td>GRPO 是否有有效相对优势</td><td>任务难度分布、dynamic sampling</td></tr><tr><td>策略熵</td><td>探索是否过快塌缩</td><td>clip 上界、温度、重复动作</td></tr><tr><td>KL(π||πref)</td><td>策略是否离参考模型过远</td><td>学习率、clip、reference 更新频率</td></tr><tr><td>输出长度 / 截断率</td><td>模型是在思考还是在拖长答案</td><td>max tokens、overlong reward、长度偏置</td></tr><tr><td>工具调用成功率</td><td>动作格式与工具选择是否正确</td><td>schema、解析器、环境异常</td></tr><tr><td>训练样本 staleness</td><td>异步 rollout 是否过时</td><td>worker 配比、更新频率、队列长度</td></tr>
+    </tbody>
+  </table>
+</div>
+<div class="callout"><span class="callout-label">最小可行决策树</span>可验证、单轮：先 GRPO/RLOO。可验证、多轮：PPO + critic 或 transition-level GRPO。不可验证、开放式：先改 reward model/过程 verifier，不要期待换 optimizer 解决目标错配。吞吐不足：再考虑异步 rollout。</div>
+<p>评估也要分层：任务成功率回答“有没有完成”；pass@k 回答“多次尝试能否找到一个解”；轨迹一致性、工具正确率和成本回答“是否以可部署的方式完成”。Agent RL 最容易出现的假进步，是成功率上升但调用次数、token、重试和环境成本同时失控。</p>
+</section>
+
+<section class="section" id="compare">
+  <div class="chapter-kicker">第八章 · COMPARISON</div>
+  <h2>把主流方法放在同一张选择表里</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>方法簇</th><th>典型论文</th><th>主要信号</th><th>优化/信用粒度</th><th>它真正解决的事</th><th>不要外推的结论</th></tr></thead>
+    <tbody>
+      <tr><td>RLVR / outcome RL</td><td>DeepSeekMath、DeepSeek-R1、DAPO、Kimi</td><td>规则 verifier、格式/答案/测试</td><td>GRPO/DAPO/GSPO；多为序列/结果级</td><td>在可验证任务上以低噪声奖励放大正确轨迹</td><td>不能自动解决开放式写作、长期规划或安全</td></tr><tr><td>在线环境 RL</td><td>WebRL、Search-R1</td><td>网页成功、检索结果、ORM</td><td>PPO/GRPO + replay/KL；episode/step 混合</td><td>让任务生成、环境反馈与策略更新闭环</td><td>benchmark 的环境/ORM 可能比算法贡献更关键</td></tr><tr><td>工具增强 RL</td><td>ReTool、Search-R1</td><td>代码执行/搜索后的最终正确性</td><td>多轮 rollout + outcome reward</td><td>学习何时、如何、是否继续调用工具</td><td>工具分布固定时，策略可能只学会任务模板</td></tr><tr><td>真实软件 RL</td><td>SWE-RL</td><td>patch similarity、reproduction tests</td><td>结果奖励 + scaffold reranking</td><td>把公开软件演化变成可规模化 RL 数据</td><td>相似度 reward 不能覆盖功能等价解</td></tr><tr><td>轨迹/层级 RL</td><td>RAGEN、Agent Lightning</td><td>episode return、critic、heuristic</td><td>turn/action/transition credit</td><td>把动态工作流拆成可训练 transition</td><td>简单均分 credit 仍可能错归因</td></tr><tr><td>训练系统与探索</td><td>AReaL、TSR</td><td>rollout 质量、环境回报</td><td>异步训练、训练时 search</td><td>解决吞吐、staleness 与探索质量</td><td>系统 speedup 不是智能增益的充分证据</td></tr>
+    </tbody>
+  </table>
+</div>
+<p>表格显示一个反直觉模式：方法越接近真实 Agent，论文越少把贡献写成“某个 loss 更好”，越多讨论任务生成、环境封装、缓存、重放、过时数据和 scaffold。Agent RL 的瓶颈正在从单一 optimizer 转向“反馈闭环的系统设计”。</p>
+<div class="stats"><div class="stat">
+  <div class="stat-value">4 层</div>
+  <div class="stat-label">奖励来源 / 粒度 / 信用 / 系统</div>
+</div><div class="stat">
+  <div class="stat-value">3 类</div>
+  <div class="stat-label">最常见 verifier：答案、测试、环境成功</div>
+</div><div class="stat">
+  <div class="stat-value">1 个警报</div>
+  <div class="stat-label">高 pass@1 不代表更宽的能力边界</div>
+</div></div>
+</section>
+
+<section class="section" id="limits">
+  <div class="chapter-kicker">第九章 · EVIDENCE &amp; FRONTIER</div>
+  <h2>哪些结论已经站稳，哪些仍然只是漂亮的曲线</h2>
+  <div class="insight-grid"><div class="insight-card">
+  <div class="module-label">较稳的结论</div>
+  <div class="insight-title">可验证奖励是规模化 RL 的第一生产力</div>
+  <div class="insight-text">数学答案、编译/测试、网页成功率让训练信号便宜、可重复、可自动扩展。DeepSeek-R1、DAPO、WebRL、SWE-RL 都沿这条线取得了可量化提升。</div>
+</div><div class="insight-card">
+  <div class="module-label">有条件的结论</div>
+  <div class="insight-title">RL 能否创造 base model 没有的推理能力仍有争议</div>
+  <div class="insight-text"><a href="https://arxiv.org/abs/2504.13837" target="_blank" rel="noreferrer">Yue et al. 2025 的批判性研究</a> 发现，RL 模型在小 k 的 pass@k 更好，但大 k 时 base model 可能追平甚至超过；作者据此认为 RL 更像重新加权已有路径。这个结论与 R1 的“自演化”叙事存在张力，应同时阅读。</div>
+</div><div class="insight-card">
+  <div class="module-label">尚未解决</div>
+  <div class="insight-title">开放式目标的 reward hacking</div>
+  <div class="insight-text">DeepSeek-R1 明确写道：当奖励由模型而非规则给出时，策略更容易找到捷径；对写作、复杂研究、真实业务的可靠 reward 仍是主要瓶颈。</div>
+</div><div class="insight-card">
+  <div class="module-label">工程前沿</div>
+  <div class="insight-title">从 outcome 到 process/trajectory verifier</div>
+  <div class="insight-text">Rewarding Progress（2024）把 process reward 定义为“未来正确率的进步”，而不是静态步骤好坏；RAGEN、Agent Lightning、TSR 则从轨迹和探索端补信用。这两条线最终需要汇合。</div>
+</div></div>
+<div class="qa"><div class="qa-row">
+  <div class="qa-question">如果我要训练一个工具型 Agent，先选什么？</div>
+  <div class="qa-answer">先把工具结果转成可判定的 outcome verifier；用 GRPO/PPO 做小规模基线，再根据失败轨迹设计课程、replay 与 turn-level credit。不要一开始就堆异步系统。</div>
+</div><div class="qa-row">
+  <div class="qa-question">什么时候用 PPO，什么时候用 GRPO/DAPO/GSPO？</div>
+  <div class="qa-answer">有可靠 step-level value、需要多轮 credit 时，PPO + critic 仍自然；同 prompt 可采样多答案且奖励可验证时，GRPO 更省内存；长 CoT/熵塌缩/吞吐是主要痛点时，再评估 DAPO 或 GSPO。</div>
+</div><div class="qa-row">
+  <div class="qa-question">读这组论文的推荐顺序？</div>
+  <div class="qa-answer">DeepSeekMath → DeepSeek-R1 → DAPO/GSPO（优化器与 recipe）→ WebRL/Search-R1/ReTool（环境与工具）→ SWE-RL（真实工程）→ RAGEN/Agent Lightning/AReaL/TSR（多轮、系统与探索）。</div>
+</div></div>
+<p>更大的图景是：Agent RL 正在把“模型能力”拆成可观测的闭环组件。下一阶段真正有区分度的问题，不会只是哪个方法在 AIME 更高，而是：同一个 Agent 能否在不同环境、不同工具、不同任务生成分布下保持稳定；能否证明奖励没有被投机；以及能否把轨迹级 credit 变成可迁移的技能。</p>
+<aside class="note">范围说明：本文聚焦 LLM/Agent post-training 的强化学习，未系统覆盖机器人 RL、游戏 self-play、离线 RL、DPO 等非在线策略优化；DPO 仅作为 Back to Basics 的对照出现。所有数字以论文/技术报告所述设置为准，未把不同 benchmark 的分数直接当成可比排行榜。</aside>
+</section>
+  </article>
+</body>
+</html>
